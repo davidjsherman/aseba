@@ -11,6 +11,7 @@ if (LIBXML2_FOUND)
 		http.cpp
 		main.cpp
 		HttpRequest.cpp
+		HttpResponse.cpp
 	)
 	set(http_MOCS
 		http.h
