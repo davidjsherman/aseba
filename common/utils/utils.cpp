@@ -292,6 +292,15 @@ namespace Aseba
 		return split<std::wstring>(s, L"\t ");
 	}
 	
+    std::string trim(const std::string& s)
+    {
+        static const char *whitespaceChars = "\n\r\t ";
+        std::string::size_type start = s.find_first_not_of(whitespaceChars);
+        std::string::size_type end = s.find_last_not_of(whitespaceChars);
+
+        return start != std::string::npos ? s.substr(start, 1 + end - start) : "";
+    }
+
 	template<typename T>
 	T join(typename std::vector<T>::const_iterator first, typename std::vector<T>::const_iterator last, const T& delim)
 	{

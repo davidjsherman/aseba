@@ -130,6 +130,9 @@ namespace Aseba
 	template<typename T>
 	std::vector<T> split(const T& s);
 	
+	//! Trims whitespaces from a string
+	std::string trim(const std::string& s);
+
 	//! Join a sequence using operator += and adding delim in-between elements
 	template<typename T>
 	T join(typename std::vector<T>::const_iterator first, typename std::vector<T>::const_iterator last, const T& delim);
