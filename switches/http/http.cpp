@@ -316,30 +316,28 @@ namespace Aseba
         else                                 // this is the HTTP stream
         {
             // incoming HTTP request
-            if (verbose)
-                cerr << "incoming for HTTP stream " << stream << endl;
-            HttpRequest* req = new HttpRequest; // [promise] we will eventually delete req in sendAvailableResponses, unscheduleResponse, or stream shutdown
-            if ( ! req->initialize(stream))
-            {   // protocol failure, shut down connection
-                stream->write("HTTP/1.1 400 Bad request\r\n");
-                stream->fail(DashelException::Unknown, 0, "400 Bad request");
-                unscheduleAllResponses(stream);
-                delete req; // not yet in queue, so delete it here [promise]
-                return;
+
+            DashelHttpRequest *request = new DashelHttpRequest(stream); // [promise] we will eventually delete req in sendAvailableResponses, unscheduleResponse, or stream shutdown
+
+            if(verbose) {
+                cerr << stream << " Incoming HTTP connection, creating request " << request << endl;
+                request->setVerbose(verbose);
             }
-            
-            if (verbose)
-            {
-                cerr << stream << " Request " << req->method.c_str() << " " << req->uri.c_str() << " [ ";
-                for (unsigned int i = 0; i < req->tokens.size(); ++i)
-                    cerr << req->tokens[i] << " ";
-                cerr << "] " << req->protocol_version << " new req " << req << endl;
+
+            if(!request->receive()) {
+            	request->respond().setStatus(HttpResponse::HTTP_STATUS_BAD_REQUEST);
+            	request->respond().send();
+
+            	stream->fail(DashelException::Unknown, 0, "400 Bad request");
+            	unscheduleAllResponses(stream);
+
+            	delete request; // not yet in queue, so delete it here [promise]
+            	return;
             }
-            // continue with incomingData
-            scheduleResponse(stream, req);
-            req->incomingData(); // read request all at once
-            if (req->ready)
-                routeRequest(req);
+
+            scheduleResponse(stream, request);
+            routeRequest(request);
+
             // run response queues immediately to save time
             sendAvailableResponses();
         }
@@ -373,7 +371,8 @@ namespace Aseba
             // i points to an HttpRequest* that is waiting for this variable value
             if (verbose)
                 cerr << *i << " updating response var (" << variables->source << "," << variables->start << ")" << endl;
-            finishResponse(*i, 200, result_str);
+
+            (*i)->respond().setContent(result_str);
             pending->erase(i++);
         }
         if (verbose)
@@ -421,7 +420,8 @@ namespace Aseba
             {
                 if (subscriber->second.count("*") >= 1 || subscriber->second.count(event_name) >= 1)
                 {
-                    appendResponse(subscriber->first, 200, true, reply.str().c_str());
+                	std::string replyString(reply.str());
+                	static_cast<DashelHttpRequest *>(subscriber->first)->getStream()->write(replyString.c_str(), replyString.size());
                 }
             }
         }
@@ -429,41 +429,34 @@ namespace Aseba
     
     //-- Routing for HTTP requests ---------------------------------------------------------
     
-    void HttpInterface::routeRequest(HttpRequest* req)
+    void HttpInterface::routeRequest(HttpRequest *request)
     {
-        // route based on uri prefix
-        if (req->tokens[0].find("nodes")==0)
-        {
-            req->tokens.erase(req->tokens.begin(),req->tokens.begin()+1);
-            
-            if (req->tokens.size() <= 1)
-            {   // one named node
-                if (req->method.find("PUT")==0)
-                    evLoad(req, req->tokens);  // load bytecode for one node
-                else
-                    evNodes(req, req->tokens); // get info for one node
-            }
-            else if (req->tokens.size() >= 2 && req->tokens[1].find("events")==0)
-            {   // subscribe to event stream for this node
-                req->tokens.erase(req->tokens.begin(),req->tokens.begin()+1);
-                evSubscribe(req, req->tokens);
-            }
-            else
-            {   // request for a varibale or an event
-                evVariableOrEvent(req, req->tokens);
-            }
-            return;
-        }
-        if (req->tokens[0].find("events")==0)
-        {   // subscribe to event stream for all nodes
-            return evSubscribe(req, req->tokens);
-        }
-        if (req->tokens[0].find("reset")==0 || req->tokens[0].find("reset_all")==0)
-        {   // reset nodes
-            return evReset(req, req->tokens);
-        }
-        else
-            finishResponse(req, 404, "");
+		// route based on uri prefix
+		std::vector<std::string> tokens(request->getTokens());
+
+		if(tokens[0].find("nodes") == 0) {
+			tokens.erase(tokens.begin(), tokens.begin() + 1);
+
+			if(tokens.size() <= 1) {   // one named node
+				if(request->getMethod().find("PUT") == 0) {
+					evLoad(request, tokens);  // load bytecode for one node
+				} else {
+					evNodes(request, tokens); // get info for one node
+				}
+			} else if(tokens.size() >= 2 && tokens[1].find("events") == 0) {   // subscribe to event stream for this node
+				tokens.erase(tokens.begin(), tokens.begin() + 1);
+				evSubscribe(request, tokens);
+			} else {   // request for a varibale or an event
+				evVariableOrEvent(request, tokens);
+			}
+			return;
+		} else if(tokens[0].find("events") == 0) {   // subscribe to event stream for all nodes
+			return evSubscribe(request, tokens);
+		} else if(tokens[0].find("reset") == 0 || tokens[0].find("reset_all") == 0) {   // reset nodes
+			return evReset(request, tokens);
+		} else {
+			request->respond().setStatus(HttpResponse::HTTP_STATUS_NOT_FOUND);
+		}
     }
     
     // Handler: Node descriptions
@@ -563,7 +556,8 @@ namespace Aseba
         json <<(do_one_node ? "" : "]");
         if (json.str().size() == 0)
             json << "[]";
-        finishResponse(req,200,json.str());
+
+        req->respond().setContent(json.str());
     }
     
     // Handler: Variable get/set or Event call
@@ -579,7 +573,7 @@ namespace Aseba
             if ( ! commonDefinitions[nodeId].events.contains(UTF8ToWString(args[1]), &eventPos))
             {
                 // this is a variable
-                if (req->method.find("POST") == 0 || args.size() >= 3)
+                if (req->getMethod().find("POST") == 0 || args.size() >= 3)
                 {
                     // set variable value
                     strings values;
@@ -589,17 +583,17 @@ namespace Aseba
                     {
                         // Parse POST form data
                         values.push_back(args[1]);
-                        parse_json_form(req->content, values);
+                        parse_json_form(req->getContent(), values);
                     }
                     if (values.size() == 0)
                     {
-                        finishResponse(req, 404, "");
+                    	req->respond().setStatus(HttpResponse::HTTP_STATUS_NOT_FOUND);
                         if (verbose)
                             cerr << req << " evVariableOrEevent 404 can't set variable " << args[0] << ", no values" <<  endl;
                         continue;
                     }
                     sendSetVariable(nodeId, values);
-                    finishResponse(req, 200, "");
+                    req->respond();
                     if (verbose)
                         cerr << req << " evVariableOrEevent 200 set variable " << values[0] <<  endl;
                 }
@@ -612,7 +606,7 @@ namespace Aseba
                     unsigned start;
                     if ( ! getVarPos(nodeId, values[0], start))
                     {
-                        finishResponse(req, 404, "");
+                    	req->respond().setStatus(HttpResponse::HTTP_STATUS_NOT_FOUND);
                         if (verbose)
                             cerr << req << " evVariableOrEevent 404 no such variable " << values[0] <<  endl;
                         continue;
@@ -636,13 +630,13 @@ namespace Aseba
                 if (args.size() >= 3)
                     for (size_t i=2; i<args.size(); ++i)
                         data.push_back((args[i].c_str()));
-                else if (req->method.find("POST") == 0)
+                else if (req->getMethod().find("POST") == 0)
                 {
                     // Parse POST form data
-                    parse_json_form(std::string(req->content, req->content.size()), data);
+                    parse_json_form(std::string(req->getContent(), req->getContent().size()), data);
                 }
                 sendEvent(nodeId, data);
-                finishResponse(req, 200, ""); // or perhaps {"return_value":null,"cmd":"sendEvent","name":nodeName}?
+                req->respond(); // or perhaps {"return_value":null,"cmd":"sendEvent","name":nodeName}?
                 continue;
             }
         }
@@ -659,13 +653,10 @@ namespace Aseba
             for (strings::iterator i = args.begin()+1; i != args.end(); ++i)
                 eventSubscriptions[req].insert(*i);
         
-        strings headers;
-        headers.push_back("Content-Type: text/event-stream");
-        headers.push_back("Cache-Control: no-cache");
-        headers.push_back("Connection: keep-alive");
-        addHeaders(req, headers);
-        appendResponse(req,200,true,"");
-        // connection must stay open!
+        req->respond().setHeader("Content-Type", "text/event-stream");
+        req->respond().setHeader("Cache-Control", "no-cache");
+        req->respond().setHeader("Connection", "keep-alive");
+        req->setBlocking(true); // connection must stay open!
     }
     
     // Handler: Compile and store a program into the node, and remember it for introspection
@@ -674,17 +665,17 @@ namespace Aseba
     {
         if (verbose)
             cerr << "PUT /nodes/" << args[0].c_str() << " trying to load aesl script\n";
-        const char* buffer = req->content.c_str();
-        size_t pos = req->content.find("file=");
+        const char* buffer = req->getContent().c_str();
+        size_t pos = req->getContent().find("file=");
         if (pos != std::string::npos)
         {
             std::vector<unsigned> todo = getIdsFromArgs(args);
             for (std::vector<unsigned>::const_iterator it = todo.begin(); it != todo.end(); ++it)
-                aeslLoadMemory(*it, buffer+pos+5, req->content.size()-pos-5);
-            finishResponse(req, 200, "");
+                aeslLoadMemory(*it, buffer+pos+5, req->getContent().size()-pos-5);
+            req->respond();
         }
         else
-            finishResponse(req, 400, "");
+        	req->respond().setStatus(HttpResponse::HTTP_STATUS_BAD_REQUEST);
     }
     
     // Handler: Reset nodes and rerun
@@ -728,7 +719,7 @@ namespace Aseba
                 }
             }
             
-            finishResponse(req, 200, "");
+            req->respond();
         }
     }
     
@@ -1167,30 +1158,7 @@ namespace Aseba
             pendingResponses[stream].pop_front();
         }
     }
-    
-    void HttpInterface::addHeaders(HttpRequest* req, strings& outheaders)
-    {
-        req->outheaders = outheaders;
-    }
-    
-    void HttpInterface::finishResponse(HttpRequest* req, unsigned status, std::string result)
-    {
-        req->result = result;
-        req->status = status;
-        req->more = false;
-        if (verbose)
-            cerr << req << " finishResponse " << status << " <" << result << ">" << endl;
-    }
-    
-    void HttpInterface::appendResponse(HttpRequest* req, unsigned status, const bool& keep_open, std::string result)
-    {
-        req->status = status;
-        req->result += result;
-        req->more = keep_open;
-        if (verbose)
-            cerr << req << " appendResponse " << req->status << " <" << req->result.substr(0,7) << "...>" <<(keep_open?", keep open":"")<< endl;
-    }
-    
+
     void HttpInterface::sendAvailableResponses()
     {
         // scan through all streams; use while to post-increment when we remove a stream
@@ -1204,29 +1172,27 @@ namespace Aseba
                     cerr << " " << *qi;
                 cerr << endl;
             }
+
             bool close_this_stream = false;
             ResponseQueue* q = &(m->second);
             
             // scan through queue for this stream
             q->begin();
-            while (! q->empty() && q->front()->status != 0)
+            while (!q->empty() && q->front()->isResponseReady())
             {
-                HttpRequest* req = q->front();
-                req->sendResponse();
-                if ( req->more )
-                    break; // keep this request open
+                HttpRequest *request = q->front();
+                request->respond().send();
                 
-                if (req->headers["Connection"].find("close")==0 ||
-                    (req->protocol_version == "HTTP/1.0" && !(req->headers["Connection"].find("keep-alive")==0)) )
+                if(request->getHeader("Connection") == "close" || (request->getProtocol() == "HTTP/1.0" && request->getHeader("Connection") != "keep-alive"))
                 {
                     // delete all requests, including this one, and remove them from queue
-                    unscheduleAllResponses(req->stream);
+                    unscheduleAllResponses(static_cast<DashelHttpRequest *>(request)->getStream());
                     close_this_stream = true;
                 }
                 else
                 {
                     // just this request is finished, delete and remove from queue
-                    delete req; // [promise]
+                    delete request; // [promise]
                     q->pop_front();
                 }
             }
@@ -1238,166 +1204,5 @@ namespace Aseba
         }
     }
     //== end of class HttpInterface ============================================================
-    
-    
-    HttpRequest::HttpRequest():
-    verbose(false)
-    {};
-    
-    bool HttpRequest::initialize( Dashel::Stream *_stream)
-    {
-        string start_line = readLine(_stream);
-        return initialize(start_line, _stream);
-    }
-    
-    bool HttpRequest::initialize( std::string const& start_line, Dashel::Stream *_stream)
-    {
-        strings parts = split<string>(start_line, " ");
-        if (parts.size() == 3
-            && (parts[0].find("GET",0)==0 || parts[0].find("PUT",0)==0 || parts[0].find("POST",0)==0)
-            && (parts[2].find("HTTP/1.1\r\n",0)==0 || parts[2].find("HTTP/1.0\r\n",0)==0) )
-        {
-            // valid start-line, parse uri
-            return initialize(parts[0], parts[1], parts[2].substr(0,8), _stream);
-        }
-        else
-            return false;
-    }
-    
-    bool HttpRequest::initialize(std::string const& _method,
-                                 std::string const& _uri,
-                                 std::string const& _protocol_version,
-                                 Dashel::Stream *_stream)
-    {
-        tokens.clear();  // parsed URI
-        headers.clear(); // incoming headers
-        content.clear(); // incoming payload
-        ready = false;
-        status = 0;      // outging status
-        result.clear();  // outgoing payload
-        outheaders.clear();  // outgoing payload
-        more = false;
-        headers_done = false;
-        status_sent = false;
-        
-        method = std::string(_method);
-        uri = std::string(_uri);
-        protocol_version = std::string(_protocol_version);
-        stream = _stream;
-        
-        // Also allow %2F as URL part delimiter (see Scratch v430)
-        std::string::size_type n = 0;
-        while ( (n=uri.find("%2F",n)) != std::string::npos)
-            uri.replace(n,3,"/"), n += 1;
-        
-        tokens = split<string>(uri, "/");
-        if (tokens[0].size() == 0)
-            tokens.erase(tokens.begin(),tokens.begin()+1);
-        return true;
-    }
-    
-    void HttpRequest::incomingData()
-    {
-        // for now, snarf complete request from stream
-        while (! headers_done)
-        {
-            const string header_field(readLine(stream));
-            int term = header_field.find("\r\n",0);
-            if (term != 0)
-            {
-                //                // LLVM regexp search is incredibly slow
-                //                std::smatch field;
-                //                std::regex e ("([-A-Za-z0-9_]+): (.*)\r\n");
-                //                std::regex_match (header_field,field,e);
-                //                if (field.size() == 3)
-                //                    headers[field[1]] = field[2];
-                if (header_field.find("Content-Length: ",0,16)==0)
-                    headers["Content-Length"] = header_field.substr(16,term-16);
-                else if (header_field.find("Connection: ",0,12)==0)
-                    headers["Connection"] = header_field.substr(12,term-12);
-            }
-            else
-                headers_done = true;
-        }
-        if (verbose)
-        {
-            cerr << stream << " Headers complete; (" << headers.size() << " headers)";
-            for (std::map<std::string,std::string>::iterator i = headers.begin(); i != headers.end(); ++i)
-                cerr << " " << i->first.c_str() << ":" << i->second.c_str();
-            cerr << endl;
-        }
-        int content_length = atoi(headers["Content-Length"].c_str());
-        content_length = (content_length > 40000) ? 40000 : content_length; // truncate at 40000 bytes
-        char* buffer = new char[ content_length ];
-        stream->read(buffer, content_length);
-        content = std::string(buffer,content_length);
-        delete []buffer;
-        ready = true;
-    }
-    
-    void HttpRequest::sendResponse()
-    {
-        if (verbose)
-            cerr << this << " sendResponse, status " << (status_sent?"":"not ") << "already sent, have "
-            << (result.empty()?"no ":"") << "result" << (more?", more":"") << endl;
-        assert( status >= 100 and status <= 599 );
-        if ( ! status_sent )
-            sendStatus();
-        if ( ! result.empty() )
-            sendPayload();
-        stream->flush();
-    }
-    
-    void HttpRequest::sendStatus()
-    {
-        if (verbose)
-            cerr << this << " sendStatus " << status << endl;
-        std::stringstream reply;
-        reply << "HTTP/1.1 " << status << " ";
-        switch (status)
-        {
-            case 200: reply << "OK";                    break;
-            case 201: reply << "Created";               break;
-            case 400: reply << "Bad Request";           break;
-            case 403: reply << "Forbidden";             break;
-            case 408: reply << "Request Timeout";       break;
-            case 500: reply << "Internal Server Error"; break;
-            case 501: reply << "Not Implemented";       break;
-            case 503: reply << "Service Unavailable";   break;
-            case 404:
-            default:  reply << "Not Found";
-        }
-        if (outheaders.size() == 0)
-        {
-            reply << "\r\nContent-Length: " << result.size() << "\r\n";
-            reply << "Content-Type: application/json\r\n"; // NO ";charset=UTF-8" cf. RFC 7159
-            reply << "Access-Control-Allow-Origin: *\r\n";
-            if (headers["Connection"].find("Keep-Alive")==0)
-                reply << "Connection: Keep-Alive\r\n";
-        }
-        else
-        {
-            for (strings::iterator i = outheaders.begin(); i != outheaders.end(); i++)
-                reply << *i << "\r\n";
-        }
-        reply << "\r\n";
-        
-        int reply_len = reply.str().size();
-        char* reply_str = (char*)malloc(reply_len);
-        memcpy(reply_str, reply.str().c_str(), reply_len);
-        stream->write(reply_str, reply_len);
-        free(reply_str);
-        stream->flush();
-        status_sent = true;
-    }
-    
-    void HttpRequest::sendPayload()
-    {
-        if (verbose)
-            cerr << this << " sendPayload " << result.size() << " bytes" << endl;
-        stream->write(result.c_str(), result.size());
-        result = "";
-    }
-    //== end of class HttpInterface ============================================================
-    
+
 };  //== end of namespace Aseba ================================================================

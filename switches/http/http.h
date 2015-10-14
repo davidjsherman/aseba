@@ -37,6 +37,9 @@
 #include <libxml/xpath.h>
 #include <libxml/xpathInternals.h>
 
+#include "HttpRequest.h"
+#include "HttpResponse.h"
+
 namespace Aseba
 {
     /**
@@ -59,7 +62,6 @@ namespace Aseba
         typedef std::map<unsigned, Aseba::VariablesMap>         NodeIdVariablesMap;
         typedef std::map<VariableAddress, ResponseSet>          VariableResponseSetMap;
         typedef std::map<Dashel::Stream*, ResponseQueue>        StreamResponseQueueMap;
-        typedef std::map<Dashel::Stream*, HttpRequest>          StreamRequestMap;
         typedef std::map<HttpRequest*, std::set<std::string> >  StreamEventSubscriptionMap;
         typedef std::map<Dashel::Stream*, unsigned>             StreamNodeIdMap;
         typedef std::set<Dashel::Stream*>                       StreamSet;
@@ -74,7 +76,6 @@ namespace Aseba
         StreamResponseQueueMap      pendingResponses;
         VariableResponseSetMap      pendingVariables;
         StreamEventSubscriptionMap  eventSubscriptions;
-        StreamRequestMap            httpRequests;
         StreamSet                   streamsToShutdown;
         bool nodeDescriptionComplete;
         // debug variables
@@ -103,9 +104,6 @@ namespace Aseba
         virtual void updateVariables(const unsigned nodeId);
         
         virtual void scheduleResponse(Dashel::Stream* stream, HttpRequest* req);
-        virtual void addHeaders(HttpRequest* req, strings& headers);
-        virtual void finishResponse(HttpRequest* req, unsigned status, std::string result);
-        virtual void appendResponse(HttpRequest* req, unsigned status, const bool& keep_open, std::string result);
         virtual void sendAvailableResponses();
         virtual void unscheduleResponse(Dashel::Stream* stream, HttpRequest* req);
         virtual void unscheduleAllResponses(Dashel::Stream* stream);
@@ -125,7 +123,7 @@ namespace Aseba
         virtual void aeslLoad(const unsigned nodeId, xmlDoc* doc);
         virtual void incomingVariables(const Variables *variables);
         virtual void incomingUserMsg(const UserMessage *userMsg);
-        virtual void routeRequest(HttpRequest* req);
+        virtual void routeRequest(HttpRequest *request);
         
         // helper functions
         //bool getNodeAndVarPos(const std::string& nodeName, const std::string& variableName, unsigned& nodeId, unsigned& pos) const;
@@ -136,46 +134,16 @@ namespace Aseba
         Dashel::Stream* getStreamFromNodeId(const unsigned nodeId);
     };
     
-    class HttpRequest
-    {
-    public:
-        typedef std::vector<std::string> strings;
-        std::string method;
-        std::string uri;
-        std::string protocol_version;
-        Dashel::Stream* stream;
-        strings tokens;  // parsed URI
-        std::map<std::string,std::string> headers; // incoming headers
-        std::string content; // incoming payload
-        bool ready; // incoming request is ready
-        unsigned status; // outging status
-        std::string result; // outgoing payload
-        strings outheaders;
-        bool more; // keep connection open for SSE
-    protected:
-        bool headers_done; // flag for header parsing
-        bool status_sent;  // flag for SSE
-        bool verbose;
-        
-    public:
-        HttpRequest();
-        virtual ~HttpRequest() {};
-        virtual bool initialize( Dashel::Stream *stream); //
-        virtual bool initialize( std::string const& start_line, Dashel::Stream *stream); //
-        virtual bool initialize( std::string const& method,  std::string const& uri, std::string const& _protocol_version, Dashel::Stream *stream);
-        virtual void incomingData();
-        virtual void sendResponse();
-        virtual void sendStatus();
-        virtual void sendPayload();
-    };
 
-    class InterruptException : public std::exception
+	
+	class InterruptException : public std::exception
     {
     public:
         InterruptException(int s) : S(s) {}
         int S;
     };
     
+
     /*@}*/
 };
 
