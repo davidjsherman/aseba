@@ -32,6 +32,25 @@ public:
     Dashel::Stream *instream, *outstream;
 };
 
+class DummyHttpRequest : public Aseba::HttpRequest
+{
+	protected:
+		virtual Aseba::HttpResponse *createResponse() { return NULL; }
+
+		virtual std::string readLine()
+		{
+			static bool read = false;
+
+			if(!read) {
+				read = true;
+				return "GET /uri/a/b/c HTTP/1.1\r\n";
+			} else {
+				return "\r\n";
+			}
+		}
+		virtual void readRaw(char *buffer, int size) {}
+};
+
 Dummy* dummy;
 
 TEST_CASE( "Dashel::Hub create" ) {
@@ -39,15 +58,15 @@ TEST_CASE( "Dashel::Hub create" ) {
     REQUIRE( dummy->instream != NULL );
 }
 
-Aseba::HttpRequest req;
+Aseba::DashelHttpRequest req(NULL);
 
 TEST_CASE( "HttpRequest using default constructor", "[init]" ) {
-    REQUIRE( req.method.empty() );
-    REQUIRE( req.uri.empty() );
-    REQUIRE( req.stream == NULL );
-    REQUIRE( req.tokens.empty() );
-    REQUIRE( req.headers.empty() );
-    REQUIRE( req.content.empty() );
+    REQUIRE( req.getMethod().empty() );
+    REQUIRE( req.getUri().empty() );
+    REQUIRE( req.getStream() == NULL );
+    REQUIRE( req.getTokens().empty() );
+    REQUIRE( req.getHeaders().empty() );
+    REQUIRE( req.getContent().empty() );
 }
 
 /*
@@ -55,21 +74,12 @@ TEST_CASE( "HttpRequest using default constructor", "[init]" ) {
 */
 
 SCENARIO( "HttpRequest should be initialized", "[init]" ) {
-    Dashel::Stream* cxn = dummy->instream;
-    
     GIVEN( "HttpRequest initialized by string" ) {
-        req.initialize("GET /uri/a/b/c HTTP/1.1\r\n", cxn);
-        REQUIRE( req.method.find("GET")==0 );
-        REQUIRE( req.uri.find("/uri/a/b/c")==0 );
-        REQUIRE( req.tokens[1].find("a")==0 );
-        REQUIRE( req.stream == cxn );
-    }
-    GIVEN( "HttpRequest initialized by parts" ) {
-        req.initialize("GET", "/uri/a/b/c", "HTTP/1.0", cxn);
-        REQUIRE( req.method.find("GET")==0 );
-        REQUIRE( req.uri.find("/uri/a/b/c")==0 );
-        REQUIRE( req.tokens[1].find("a")==0 );
-        REQUIRE( req.stream == cxn );
+        DummyHttpRequest dummyRequest;
+        REQUIRE( dummyRequest.receive() );
+        REQUIRE( dummyRequest.getMethod().find("GET")==0 );
+        REQUIRE( dummyRequest.getUri().find("/uri/a/b/c")==0 );
+        REQUIRE( dummyRequest.getTokens()[1].find("a")==0 );
     }
 }
 
@@ -77,27 +87,27 @@ SCENARIO( "HttpRequests should be read from file", "[read]" ) {
     GIVEN( "Stream was initialized" ) {
         REQUIRE( dummy->instream != NULL );
         WHEN( "read request 1 from file" ) {
-            req.initialize(dummy->instream);
-            req.incomingData(); // from dummy->instream
+        	req = Aseba::DashelHttpRequest(dummy->instream);
+        	req.receive();
             THEN( "HttpRequest is correct" ) {
-                REQUIRE( req.ready );
-                REQUIRE( req.method.find("GET")==0 );
-                REQUIRE( req.uri.find("/uri/a/b/c")==0 );
-                REQUIRE( req.tokens[3].find("c")==0 );
-                REQUIRE( req.headers["Content-Length"].find("19")==0 );
-                REQUIRE( req.content.find("payload uri a b c\r\n")==0 );
+                REQUIRE( req.isValid() );
+                REQUIRE( req.getMethod().find("GET")==0 );
+                REQUIRE( req.getUri().find("/uri/a/b/c")==0 );
+                REQUIRE( req.getTokens()[3].find("c")==0 );
+                REQUIRE( req.getHeader("Content-Length").find("19")==0 );
+                REQUIRE( req.getContent().find("payload uri a b c\r\n")==0 );
             }
         }
         AND_WHEN( "read request 2 from file" ) {
-            req.initialize(dummy->instream);
-            req.incomingData(); // from dummy->instream
+        	req = Aseba::DashelHttpRequest(dummy->instream);
+        	req.receive();
             THEN( "HttpRequest is correct" ) {
-                REQUIRE( req.ready );
-                REQUIRE( req.method.find("GET")==0 );
-                REQUIRE( req.uri.find("/uri")==0 );
-                REQUIRE( req.uri.size()==4 );
-                REQUIRE( req.tokens[0].find("uri")==0 );
-                REQUIRE( req.content.size()==0 );
+                REQUIRE( req.isValid() );
+                REQUIRE( req.getMethod().find("GET")==0 );
+                REQUIRE( req.getUri().find("/uri")==0 );
+                REQUIRE( req.getUri().size()==4 );
+                REQUIRE( req.getTokens()[0].find("uri")==0 );
+                REQUIRE( req.getContent().size()==0 );
             }
         }
     }
@@ -114,12 +124,12 @@ TEST_CASE_METHOD(Aseba::HttpInterface, "Aseba::HttpInterface should be initializ
 
 TEST_CASE_METHOD(Aseba::HttpInterface, "StreamResponseQueueMap should manage pending responses" ) {
     Dashel::Stream* stream1 = (Dashel::Stream*)0x1111001;
-    Aseba::HttpRequest* req11 = new Aseba::HttpRequest;
-    Aseba::HttpRequest* req12 = new Aseba::HttpRequest;
+    Aseba::HttpRequest* req11 = new Aseba::DashelHttpRequest(stream1);
+    Aseba::HttpRequest* req12 = new Aseba::DashelHttpRequest(stream1);
     Dashel::Stream* stream2 = (Dashel::Stream*)0x1111002;
-    Aseba::HttpRequest* req21 = new Aseba::HttpRequest;
-    Aseba::HttpRequest* req22 = new Aseba::HttpRequest;
-    Aseba::HttpRequest* req23 = new Aseba::HttpRequest;
+    Aseba::HttpRequest* req21 = new Aseba::DashelHttpRequest(stream2);
+    Aseba::HttpRequest* req22 = new Aseba::DashelHttpRequest(stream2);
+    Aseba::HttpRequest* req23 = new Aseba::DashelHttpRequest(stream2);
     GIVEN( "queue was initialized" ) {
         REQUIRE( pendingResponses.size() == 0 );
         WHEN( "insert pendingResponses responses in queues" ) {
@@ -139,34 +149,39 @@ TEST_CASE_METHOD(Aseba::HttpInterface, "StreamResponseQueueMap should manage pen
                 REQUIRE( *i2++ == req22 );
                 REQUIRE( *i2   == req23 );
                 WHEN( "update results" ) {
-                    finishResponse(req11, 200, "result 11");
-                    finishResponse(req12, 200, "result 12");
-                    finishResponse(req21, 201, "result 21");
-                    finishResponse(req22, 202, "result 22");
-                    finishResponse(req23, 203, "result 23");
+					req11->respond().setStatus(Aseba::HttpResponse::HTTP_STATUS_OK);
+					req11->respond().setContent("result 11");
+					req12->respond().setStatus(Aseba::HttpResponse::HTTP_STATUS_OK);
+					req12->respond().setContent("result 12");
+					req21->respond().setStatus(Aseba::HttpResponse::HTTP_STATUS_CREATED);
+					req21->respond().setContent("result 21");
+					req22->respond().setStatus(Aseba::HttpResponse::HTTP_STATUS_BAD_REQUEST);
+					req22->respond().setContent("result 22");
+					req23->respond().setStatus(Aseba::HttpResponse::HTTP_STATUS_FORBIDDEN);
+					req23->respond().setContent("result 23");
                     i1 = pendingResponses[stream1].begin();
                     i2 = pendingResponses[stream2].begin();
-                    REQUIRE( (*i1++)->result == "result 11" );
-                    REQUIRE( (*i1  )->result == "result 12" );
+                    REQUIRE( (*i1++)->respond().getContent() == "result 11" );
+                    REQUIRE( (*i1  )->respond().getContent() == "result 12" );
 
-                    REQUIRE( (*i2  )->status == 201 );
-                    REQUIRE( (*i2++)->result == "result 21" );
+                    REQUIRE( (*i2  )->respond().getStatus() == 201 );
+                    REQUIRE( (*i2++)->respond().getContent() == "result 21" );
 
-                    REQUIRE( (*i2  )->status == 202 );
-                    REQUIRE( (*i2++)->result == "result 22" );
+                    REQUIRE( (*i2  )->respond().getStatus() == 400 );
+                    REQUIRE( (*i2++)->respond().getContent() == "result 22" );
 
-                    REQUIRE( (*i2  )->status == 203 );
-                    REQUIRE( (*i2  )->result == "result 23" );
+                    REQUIRE( (*i2  )->respond().getStatus() == 403 );
+                    REQUIRE( (*i2  )->respond().getContent() == "result 23" );
                     WHEN( "unschedule responses" ) {
                         unscheduleResponse(stream2, req22);
                         i2 = pendingResponses[stream2].begin();
-                        REQUIRE( (*i2++)->result == "result 21" );
-                        REQUIRE( (*i2  )->result == "result 23" );
+                        REQUIRE( (*i2++)->respond().getContent() == "result 21" );
+                        REQUIRE( (*i2  )->respond().getContent() == "result 23" );
                         unscheduleResponse(stream1, req11);
                         unscheduleResponse(stream1, req11);
                         unscheduleResponse(stream1, req11);
                         i1 = pendingResponses[stream1].begin();
-                        REQUIRE( (*i1)->result == "result 12" );
+                        REQUIRE( (*i1)->respond().getContent() == "result 12" );
                         unscheduleResponse(stream1, req12);
                         REQUIRE( pendingResponses[stream1].size() == 0 );
                         WHEN( "unschedule all responses") {
