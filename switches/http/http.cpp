@@ -421,7 +421,9 @@ namespace Aseba
                 if (subscriber->second.count("*") >= 1 || subscriber->second.count(event_name) >= 1)
                 {
                 	std::string replyString(reply.str());
-                	static_cast<DashelHttpRequest *>(subscriber->first)->getStream()->write(replyString.c_str(), replyString.size());
+                	Dashel::Stream *stream = static_cast<DashelHttpRequest *>(subscriber->first)->getStream();
+                	stream->write(replyString.c_str(), replyString.size());
+                	stream->flush();
                 }
             }
         }
