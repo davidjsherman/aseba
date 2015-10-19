@@ -119,7 +119,9 @@ void HttpResponse::addHeadersReply(std::ostringstream& reply)
 	map<string, string>::const_iterator end = headers.end();
 	for(map<string, string>::const_iterator iter = headers.begin(); iter != end; ++iter) {
 		if(iter->first == "Content-Length") { // override with actual size
-			reply << iter->first << ": " << content.size() << "\r\n";
+			if(getHeader("Content-Type") != "text/event-stream") { // but only if this is not an event stream
+				reply << iter->first << ": " << content.size() << "\r\n";
+			}
 		} else {
 			reply << iter->first << ": " << iter->second << "\r\n";
 		}
