@@ -658,6 +658,7 @@ namespace Aseba
         req->respond().setHeader("Content-Type", "text/event-stream");
         req->respond().setHeader("Cache-Control", "no-cache");
         req->respond().setHeader("Connection", "keep-alive");
+        req->respond().send(); // send header immediately
         req->setBlocking(true); // connection must stay open!
     }
     
