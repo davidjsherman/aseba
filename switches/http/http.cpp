@@ -94,6 +94,8 @@
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 
+#include "HttpInterfaceHandlers.h"
+
 #if DASHEL_VERSION_INT < 10003
 #	error "You need at least Dashel version 1.0.3 to compile Http"
 #endif // DAHSEL_VERSION_INT
@@ -143,6 +145,10 @@ namespace Aseba
     iterations(iterations)
     // created empty: pendingResponses, pendingVariables, eventSubscriptions, httpRequests, streamsToShutdown
     {
+    	addSubhandler(new NodesHandler(this));
+    	addSubhandler(new EventsHandler(this));
+    	addSubhandler(new ResetHandler(this));
+
         // listen for incoming HTTP requests
         httpStream = connect("tcpin:port=" + http_port);
 
@@ -336,7 +342,7 @@ namespace Aseba
             }
 
             scheduleResponse(stream, request);
-            routeRequest(request);
+            handleRequest(request, request->getTokens());
 
             // run response queues immediately to save time
             sendAvailableResponses();
@@ -428,305 +434,6 @@ namespace Aseba
             }
         }
     }
-    
-    //-- Routing for HTTP requests ---------------------------------------------------------
-    
-    void HttpInterface::routeRequest(HttpRequest *request)
-    {
-		// route based on uri prefix
-		std::vector<std::string> tokens(request->getTokens());
-
-		if(tokens[0].find("nodes") == 0) {
-			tokens.erase(tokens.begin(), tokens.begin() + 1);
-
-			if(tokens.size() <= 1) {   // one named node
-				if(request->getMethod().find("PUT") == 0) {
-					evLoad(request, tokens);  // load bytecode for one node
-				} else {
-					evNodes(request, tokens); // get info for one node
-				}
-			} else if(tokens.size() >= 2 && tokens[1].find("events") == 0) {   // subscribe to event stream for this node
-				tokens.erase(tokens.begin(), tokens.begin() + 1);
-				evSubscribe(request, tokens);
-			} else {   // request for a varibale or an event
-				evVariableOrEvent(request, tokens);
-			}
-			return;
-		} else if(tokens[0].find("events") == 0) {   // subscribe to event stream for all nodes
-			return evSubscribe(request, tokens);
-		} else if(tokens[0].find("reset") == 0 || tokens[0].find("reset_all") == 0) {   // reset nodes
-			return evReset(request, tokens);
-		} else {
-			request->respond().setStatus(HttpResponse::HTTP_STATUS_NOT_FOUND);
-		}
-    }
-    
-    // Handler: Node descriptions
-    
-    void HttpInterface::evNodes(HttpRequest* req, strings& args)
-    {
-        bool do_one_node(args.size() > 0);
-        
-        std::stringstream json;
-        json << (do_one_node ? "" : "["); // hack, should first select list of matching nodes, then check size
-        
-        for (NodesDescriptionsMap::iterator descIt = nodesDescriptions.begin();
-             descIt != nodesDescriptions.end(); ++descIt)
-        {
-            const NodeDescription& description(descIt->second);
-            string nodeName = WStringToUTF8(description.name);
-            unsigned nodeId = descIt->first;
-            
-            if (! do_one_node)
-            {
-                json << (descIt == nodesDescriptions.begin() ? "" : ",");
-                json << "{";
-                json << "\"node\":" << nodeId << ",";
-                json << "\"name\":\"" << nodeName << "\",\"protocolVersion\":" << description.protocolVersion;
-                json << "}";
-            }
-            else // (do_one_node)
-            {
-                if (! (descIt->first == atoi(args[0].c_str()) ||
-                       nodeName.find(args[0])==0) )
-                    continue; // this is not a match, skip to next candidate
-
-                json << "{"; // begin node
-                json << "\"node\":\"" << nodeId << "\",";
-                json << "\"name\":\"" << nodeName << "\",\"protocolVersion\":" << description.protocolVersion;
-
-                json << ",\"bytecodeSize\":" << description.bytecodeSize;
-                json << ",\"variablesSize\":" <<description.variablesSize;
-                json << ",\"stackSize\":" << description.stackSize;
-                
-                // named variables
-                json << ",\"namedVariables\":{";
-                bool seen_named_variables = false;
-                for (NodeIdVariablesMap::const_iterator n(allVariables.find(nodeId));
-                     n != allVariables.end(); ++n)
-                {
-                    VariablesMap vm = n->second;
-                    for (VariablesMap::iterator i = vm.begin();
-                         i != vm.end(); ++i)
-                    {
-                        json << (i == vm.begin() ? "" : ",") << "\"" << WStringToUTF8(i->first) << "\":" << i->second.second;
-                        seen_named_variables = true;
-                    }
-                }
-                if ( ! seen_named_variables )
-                {
-                    // failsafe: if compiler hasn't found any variables, get them from the node description
-                    for (vector<Aseba::TargetDescription::NamedVariable>::const_iterator i(description.namedVariables.begin());
-                         i != description.namedVariables.end(); ++i)
-                        json << (i == description.namedVariables.begin() ? "" : ",")
-                        << "\"" << WStringToUTF8(i->name) << "\":" << i->size;
-                }
-                json << "}";
-                
-                // local events variables
-                json << ",\"localEvents\":{";
-                for (size_t i = 0; i < description.localEvents.size(); ++i)
-                {
-                    string ev(WStringToUTF8(description.localEvents[i].name));
-                    json << (i == 0 ? "" : ",")
-                    << "\"" << ev << "\":"
-                    << "\"" << WStringToUTF8(description.localEvents[i].description) << "\"";
-                }
-                json << "}";
-                
-                // constants from introspection
-                json << ",\"constants\":{";
-                for (size_t i = 0; i < commonDefinitions[nodeId].constants.size(); ++i)
-                    json << (i == 0 ? "" : ",")
-                    << "\"" << WStringToUTF8(commonDefinitions[nodeId].constants[i].name) << "\":"
-                    << commonDefinitions[nodeId].constants[i].value;
-                json << "}";
-                
-                // events from introspection
-                json << ",\"events\":{";
-                for (size_t i = 0; i < commonDefinitions[nodeId].events.size(); ++i)
-                    json << (i == 0 ? "" : ",")
-                    << "\"" << WStringToUTF8(commonDefinitions[nodeId].events[i].name) << "\":"
-                    << commonDefinitions[nodeId].events[i].value;
-                json << "}";
-
-                json << "}"; // end node
-                break; // only show first matching node :-(
-            }
-        }
-        
-        json <<(do_one_node ? "" : "]");
-        if (json.str().size() == 0)
-            json << "[]";
-
-        req->respond().setContent(json.str());
-    }
-    
-    // Handler: Variable get/set or Event call
-    
-    void HttpInterface::evVariableOrEvent(HttpRequest* req, strings& args)
-    {
-        std::vector<unsigned> todo = getIdsFromArgs(args);
-        size_t eventPos;
-        
-        for (std::vector<unsigned>::const_iterator it = todo.begin(); it != todo.end(); ++it)
-        {
-            unsigned nodeId = *it;
-            if ( ! commonDefinitions[nodeId].events.contains(UTF8ToWString(args[1]), &eventPos))
-            {
-                // this is a variable
-                if (req->getMethod().find("POST") == 0 || args.size() >= 3)
-                {
-                    // set variable value
-                    strings values;
-                    if (args.size() >= 3)
-                        values.assign(args.begin()+1, args.end());
-                    else
-                    {
-                        // Parse POST form data
-                        values.push_back(args[1]);
-                        parse_json_form(req->getContent(), values);
-                    }
-                    if (values.size() == 0)
-                    {
-                    	req->respond().setStatus(HttpResponse::HTTP_STATUS_NOT_FOUND);
-                        if (verbose)
-                            cerr << req << " evVariableOrEevent 404 can't set variable " << args[0] << ", no values" <<  endl;
-                        continue;
-                    }
-                    sendSetVariable(nodeId, values);
-                    req->respond();
-                    if (verbose)
-                        cerr << req << " evVariableOrEevent 200 set variable " << values[0] <<  endl;
-                }
-                else
-                {
-                    // get variable value
-                    strings values;
-                    values.assign(args.begin()+1, args.begin()+2);
-                    
-                    unsigned start;
-                    if ( ! getVarPos(nodeId, values[0], start))
-                    {
-                    	req->respond().setStatus(HttpResponse::HTTP_STATUS_NOT_FOUND);
-                        if (verbose)
-                            cerr << req << " evVariableOrEevent 404 no such variable " << values[0] <<  endl;
-                        continue;
-                    }
-                    
-                    sendGetVariables(nodeId, values);
-                    pendingVariables[std::make_pair(nodeId,start)].insert(req);
-                    
-                    if (verbose)
-                        cerr << req << " evVariableOrEevent schedule var " << values[0]
-                        << "(" << nodeId << "," << start << ") add " << req << " to subscribers" <<  endl;
-                    continue;
-                }
-            }
-            else
-            {
-                // this is an event
-                // arguments are args 1..N
-                strings data;
-                data.push_back(args[1]);
-                if (args.size() >= 3)
-                    for (size_t i=2; i<args.size(); ++i)
-                        data.push_back((args[i].c_str()));
-                else if (req->getMethod().find("POST") == 0)
-                {
-                    // Parse POST form data
-                    parse_json_form(std::string(req->getContent(), req->getContent().size()), data);
-                }
-                sendEvent(nodeId, data);
-                req->respond(); // or perhaps {"return_value":null,"cmd":"sendEvent","name":nodeName}?
-                continue;
-            }
-        }
-    }
-    
-    // Handler: Subscribe to an event stream
-    
-    void HttpInterface::evSubscribe(HttpRequest* req, strings& args)
-    {
-        // eventSubscriptions[conn] is an unordered set of strings
-        if (args.size() == 1)
-            eventSubscriptions[req].insert("*");
-        else
-            for (strings::iterator i = args.begin()+1; i != args.end(); ++i)
-                eventSubscriptions[req].insert(*i);
-        
-        req->respond().setHeader("Content-Type", "text/event-stream");
-        req->respond().setHeader("Cache-Control", "no-cache");
-        req->respond().setHeader("Connection", "keep-alive");
-        req->respond().send(); // send header immediately
-        req->setBlocking(true); // connection must stay open!
-    }
-    
-    // Handler: Compile and store a program into the node, and remember it for introspection
-    
-    void HttpInterface::evLoad(HttpRequest* req, strings& args)
-    {
-        if (verbose)
-            cerr << "PUT /nodes/" << args[0].c_str() << " trying to load aesl script\n";
-        const char* buffer = req->getContent().c_str();
-        size_t pos = req->getContent().find("file=");
-        if (pos != std::string::npos)
-        {
-            std::vector<unsigned> todo = getIdsFromArgs(args);
-            for (std::vector<unsigned>::const_iterator it = todo.begin(); it != todo.end(); ++it)
-                aeslLoadMemory(*it, buffer+pos+5, req->getContent().size()-pos-5);
-            req->respond();
-        }
-        else
-        	req->respond().setStatus(HttpResponse::HTTP_STATUS_BAD_REQUEST);
-    }
-    
-    // Handler: Reset nodes and rerun
-    
-    void HttpInterface::evReset(HttpRequest* req, strings& args)
-    {
-        for (NodesDescriptionsMap::iterator descIt = nodesDescriptions.begin();
-             descIt != nodesDescriptions.end(); ++descIt)
-        {
-            bool ok = true;
-            // nodeId = getNodeId(descIt->second.name, 0, &ok);
-            if (!ok)
-                continue;
-            string nodeName = WStringToUTF8(descIt->second.name);
-            
-            for (StreamNodeIdMap::iterator it=asebaStreams.begin(); it!=asebaStreams.end(); ++it)
-            {
-                Dashel::Stream* stream = it->first;
-                unsigned nodeId = it->second;
-                Reset(nodeId).serialize(stream); // reset node
-                stream->flush();
-                Run(nodeId).serialize(stream);   // re-run node
-                stream->flush();
-                if (descIt->second.name.find(L"thymio-II") == 0)
-                {   // Special case for Thymio-II. Should we instead just check whether motor.*.target exists?
-                    strings args;
-                    args.push_back("motor.left.target");
-                    args.push_back("0");
-                    sendSetVariable(nodeId, args);
-                    args[0] = "motor.right.target";
-                    sendSetVariable(nodeId, args);
-                }
-                size_t eventPos;
-                if (commonDefinitions[nodeId].events.contains(UTF8ToWString("reset"), &eventPos))
-                {
-                    // bug: assumes AESL file is common to all nodes
-                    // can we get this from the node description?
-                    strings data;
-                    data.push_back("reset");
-                    sendEvent(nodeId,data);
-                }
-            }
-            
-            req->respond();
-        }
-    }
-    
-    
     
     //-- Sending messages on the Aseba bus -------------------------------------------------
     
