@@ -10,6 +10,7 @@ if (LIBXML2_FOUND)
 	set(http_SRCS
 		http.cpp
 		main.cpp
+		HttpInterfaceHandlers.cpp
 		HttpRequest.cpp
 		HttpResponse.cpp
 	)
