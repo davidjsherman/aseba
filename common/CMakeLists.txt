@@ -5,6 +5,7 @@ set (ASEBACOMMON_SRC
 	utils/BootloaderInterface.cpp
 	msg/msg.cpp
 	msg/NodesManager.cpp
+	zeroconf/zeroconf.cpp
 )
 add_library(asebacommon ${ASEBACOMMON_SRC})
 set_target_properties(asebacommon PROPERTIES VERSION ${LIB_VERSION_STRING} 
@@ -28,6 +29,9 @@ set (ASEBACORE_HDR_COMMON
 	types.h
 	productids.h
 )
+set (ASEBACORE_HDR_ZEROCONF
+	zeroconf/zeroconf.h
+)
 install(FILES ${ASEBACORE_HDR_UTILS}
 	DESTINATION include/aseba/common/utils
 )
@@ -36,4 +40,7 @@ install(FILES ${ASEBACORE_HDR_MSG}
 )
 install(FILES ${ASEBACORE_HDR_COMMON}
 	DESTINATION include/aseba/common
+)
+install(FILES ${ASEBACORE_HDR_ZEROCONF}
+	DESTINATION include/aseba/common/msg
 )
