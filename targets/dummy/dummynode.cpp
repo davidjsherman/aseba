@@ -85,7 +85,7 @@ public:
 	
     Dashel::Stream* listen(int basePort, int deltaPort)
 	{
-		const int port(basePort + deltaPort);
+        const int port(basePort ? basePort + deltaPort : 0);
 		vm.nodeId = 1 + deltaPort;
 		strncpy(mutableName, "dummynode-0", 12);
 		mutableName[10] = '0' + deltaPort;
@@ -327,7 +327,7 @@ int main(int argc, char* argv[])
             basePort = atoi(argv[argCounter++]);
         else
         {
-            deltaPort = atoi(argv[argCounter++]);
+            deltaPort = atoi(arg);
             if (deltaPort < 0 || deltaPort >= 9)
             {
                 std::cerr << "Usage: " << argv[0] << " [delta port, from 0 to 9]" << std::endl;
