@@ -83,21 +83,20 @@ public:
 		vm.variablesSize = sizeof(variables) / sizeof(sint16);
 	}
 	
-    Dashel::Stream* listen(int basePort, int deltaPort)
+	Dashel::Stream* listen(const int port, int deltaNodeId)
 	{
-        const int port(basePort ? basePort + deltaPort : 0);
-		vm.nodeId = 1 + deltaPort;
+		vm.nodeId = 1 + deltaNodeId;
 		strncpy(mutableName, "dummynode-0", 12);
-		mutableName[10] = '0' + deltaPort;
+		mutableName[10] = '0' + deltaNodeId;
 		nodeDescription.name = mutableName;
-        Dashel::Stream* listen_stream;
+		Dashel::Stream* listen_stream;
 		
 		// connect network
 		try
 		{
 			std::ostringstream oss;
 			oss << "tcpin:port=" << port;
-            listen_stream = Dashel::Hub::connect(oss.str());
+			listen_stream = Dashel::Hub::connect(oss.str());
 		}
 		catch (Dashel::DashelException e)
 		{
@@ -108,8 +107,8 @@ public:
 		// init VM
 		AsebaVMInit(&vm);
 
-        // return stream
-        return listen_stream;
+		// return stream
+		return listen_stream;
 	}
 	
 	virtual void connectionCreated(Dashel::Stream *stream)
@@ -313,36 +312,47 @@ extern "C" void AsebaAssert(AsebaVMState *vm, AsebaAssertReason reason)
 	AsebaVMInit(vm);
 }
 
+int usage(char* program)
+{
+	std::cerr << "Usage: " << program << " [--basePort|-b BASE, default 33333] [ID, from 0 to 9]" << std::endl;
+	std::cerr << "Usage: " << program << " --port|-p PORT [ID, from 0 to 9]" << std::endl;
+	std::cerr << "Usage: " << program << " --help|-h" << std::endl;
+	std::cerr << "Creates one node dummynode-ID with node id ID+1 listening on port:" << std::endl;
+	std::cerr << " - BASE+ID, if BASE != 0 and BASE+ID is available" << std::endl;
+	std::cerr << " - PORT, if PORT != 0 and PORT is available" << std::endl;
+	std::cerr << " - a dynamically chosen port, if PORT or BASE == 0." << std::endl;
+	std::cerr << "The Dashel target is printed on stdout." << std::endl;
+	return 1;
+}
 
 int main(int argc, char* argv[])
 {
-	int basePort(ASEBA_DEFAULT_PORT);
-	int deltaPort = 0;
+	int port(ASEBA_DEFAULT_PORT);
+	bool do_delta(false);
+	int deltaNodeId(0);
 
-    int argCounter = 1;
-    while (argCounter < argc)
-    {
-        const char *arg = argv[argCounter++];
-        if ((strcmp(arg, "-b") == 0) || (strcmp(arg, "--basePort") == 0))
-            basePort = atoi(argv[argCounter++]);
-        else
-        {
-            deltaPort = atoi(arg);
-            if (deltaPort < 0 || deltaPort >= 9)
-            {
-                std::cerr << "Usage: " << argv[0] << " [delta port, from 0 to 9]" << std::endl;
-                return 1;
-            }
-        }
-    }
-    
-	Dashel::Stream* listen = node.listen(basePort, deltaPort);
+	int argCounter = 1;
+	while (argCounter < argc)
+	{
+		const char *arg = argv[argCounter++];
+		if ((strcmp(arg, "-b") == 0) || (strcmp(arg, "--basePort") == 0))
+			do_delta = (port = atoi(argv[argCounter++]));
+		else if ((strcmp(arg, "-p") == 0) || (strcmp(arg, "--port") == 0))
+			do_delta = false, port = atoi(argv[argCounter++]);
+		else if ((strcmp(arg, "-h") == 0) || (strcmp(arg, "--help") == 0))
+			return usage(argv[0]);
+		else
+		{
+			deltaNodeId = atoi(arg);
+			if (deltaNodeId < 0 || deltaNodeId >= 9)
+				return usage(argv[0]);
+		}
+	}
 
-    Aseba::Zeroconf zs;
-    std::string txt_record = Aseba::Zeroconf::txtRecord(ASEBA_PROTOCOL_VERSION, "Unknown", {1+deltaPort}, {ASEBA_PID_UNDEFINED});
-    zs.registerPort(nodeDescription.name, atoi(listen->getTargetParameter("port").c_str()), txt_record);
+	Dashel::Stream* listen = node.listen(do_delta ? port+deltaNodeId : port,
+					     deltaNodeId);
 
-    std::cout << "tcp:localhost;port=" << listen->getTargetParameter("port") << std::endl;
+	std::cout << "tcp:port=" << listen->getTargetParameter("port") << std::endl;
 
 	node.run();
 }
