@@ -23,9 +23,13 @@
 
 #include "../types.h"
 #include "../consts.h"
+#include <typeinfo>
+#include <string>
+#include <iostream>
+#include <sstream>
+#include <iomanip>
 #include <map>
 #include <vector>
-#include <string>
 #include <dns_sd.h>
 
 namespace Dashel
@@ -61,8 +65,6 @@ namespace Aseba
 			std::string domain;
 			DNSServiceRef serviceref;
 		public:
-			ZeroconfService() {}
-			ZeroconfService(const std::string name, const std::string domain) : name(name), domain(domain) {}
 			~ZeroconfService()
 			{   // release the service reference
 				if (serviceref)
@@ -76,19 +78,44 @@ namespace Aseba
 		};
 
 	public:
-		typedef std::map<std::string,std::string> ServiceInfo;
-		std::map<std::string, ServiceInfo> targets;
+		//! An error in registering or browsing Zeroconf
+		struct Error:public std::runtime_error
+		{
+			Error(const std::string& what): std::runtime_error(what) {}
+		};
+
 	public:
-		static std::string txtRecord(int protovers, std::string type, std::vector<int> ids, std::vector<int> pids);
-		void registerPort(const std::string name, const unsigned port, const std::string txt);
-		void registerStream(const std::string name, const Dashel::Stream* dashel_stream, const std::string txt);
-		void browseForTargets();
+		class TxtRecord;
+		typedef std::map<std::string,std::string> ServiceInfo; //!< (key, value) set
+
+	public:
+		static std::string txtRecord(int protovers, const std::string& type, const std::vector<int>& ids, const std::vector<int>& pids);
+
+		virtual void registerPort(const std::string& name, const unsigned port, const std::string& txt);
+		virtual void registerStream(const std::string& name, const Dashel::Stream* dashel_stream, const std::string& txt);
+		virtual void updateTxtRecord(const std::string& name, TxtRecord& record);
+		virtual void browseForTargets();
+		virtual std::map<std::string, ServiceInfo> getTargets();
 
 	private:
 		static void DNSSD_API cb_Register(DNSServiceRef, DNSServiceFlags, DNSServiceErrorType,
 										  const char *, const char *, const char *, void *);
 
-		std::map<std::string, ZeroconfService> services;
+		std::map<std::string, ZeroconfService> services; //!< map friendly name to service record
+		std::map<std::string, ServiceInfo> targets; //!< map friendly name to (key, value) set
+	};
+
+	class Zeroconf::TxtRecord
+	{
+	public:
+		TxtRecord(int protovers, const std::string& type, const std::vector<int>& ids, const std::vector<int>& pids);
+		virtual void add(const std::string& key, const std::string& value);
+		virtual void add(const std::string& key, const int value);
+		virtual void add(const std::string& key, const std::vector<int>& values);
+		virtual std::string record();
+
+	private:
+		std::ostringstream txt;
 	};
 
 	/*@}*/

@@ -21,10 +21,6 @@
 #include "zeroconf.h"
 #include "../utils/utils.h"
 #include "../utils/FormatableString.h"
-#include <typeinfo>
-#include <iostream>
-#include <iomanip>
-#include <map>
 #include <dashel/dashel.h>
 
 using namespace std;
@@ -34,16 +30,16 @@ namespace Aseba
 	using namespace Dashel;
 
 	//! Register and announce a target described by a name and a port
-	void Zeroconf::registerPort(const string name, const unsigned port, const string txt)
+	void Zeroconf::registerPort(const string& name, const unsigned port, const string& txt)
 	{
-		ZeroconfService z;
+		ZeroconfService z{name,"_aseba._tcp.","local."};
 		uint16_t len = txt.size();
 		const char* record = txt.c_str();
 		DNSServiceErrorType err = DNSServiceRegister(&z.serviceref,
 							     kDNSServiceFlagsDefault,
-							     0, // default all interfaces
+							     0, // default all interfaces
 							     name.c_str(),
-							     "_aseba._tcp",
+							     "_aseba._tcp.",
 							     NULL, // use default domain
 							     NULL, // use this host name
 							     htons(port),
@@ -52,12 +48,12 @@ namespace Aseba
 							     cb_Register,
 							     &z);
 		if (err != kDNSServiceErr_NoError)
-			throw runtime_error(FormatableString("Zeroconf DNSServiceRegister: error %0").arg(err));
+			throw Zeroconf::Error(FormatableString("DNSServiceRegister: error %0").arg(err));
 		else
 		{
 			DNSServiceErrorType err = DNSServiceProcessResult(z.serviceref); // block until daemon replies
 			if (err != kDNSServiceErr_NoError)
-				throw runtime_error(FormatableString("Zeroconf DNSServiceProcessResult: error %0").arg(err));
+				throw Zeroconf::Error(FormatableString("DNSServiceProcessResult: error %0").arg(err));
 			else
 			{
 				services[z.name] = z; // copy
@@ -67,9 +63,8 @@ namespace Aseba
 	}
 
 	//! Register and announce a target described by an existing Dashel stream
-	void Zeroconf::registerStream(const std::string name, const Dashel::Stream* stream, const string txt)
+	void Zeroconf::registerStream(const std::string& name, const Dashel::Stream* stream, const string& txt)
 	{
-		string service_name = name;
 		unsigned port = atoi(stream->getTargetParameter("port").c_str());
 		registerPort(name,port,txt);
 	}
@@ -89,7 +84,7 @@ namespace Aseba
 					     void *context)
 	{
 		if (errorCode != kDNSServiceErr_NoError)
-			throw runtime_error(FormatableString("Zeroconf DNSServiceRegisterReply: error %0").arg(errorCode));
+			throw Zeroconf::Error(FormatableString("DNSServiceRegisterReply: error %0").arg(errorCode));
 		else
 		{
 			ZeroconfService *zref = (ZeroconfService *)context;
@@ -99,32 +94,69 @@ namespace Aseba
 		}
 	}
 
-	//! Format target info for DNS TXT record
-	string Zeroconf::txtRecord(int protovers, std::string type, std::vector<int> ids, std::vector<int> pids)
+	//! Helper to format target info for DNS TXT record
+	string Zeroconf::txtRecord(int protovers, const std::string& type, const std::vector<int>& ids, const std::vector<int>& pids)
 	{
-		std::ostringstream txt;
-		if (type.size() > 20)
-			type = type.substr(0,20);
+		Zeroconf::TxtRecord t(protovers, type, ids, pids);
+		return t.record();
+	}
 
-		txt.put(9);
-		txt << "txtvers=1";
+	//! Replace TXT record with a new one, typically when node, pid lists change
+	void Zeroconf::updateTxtRecord(const std::string& name, TxtRecord& rec)
+	{
+		ZeroconfService zs = services[name];
+		string rawdata = rec.record();
+		DNSServiceErrorType err = DNSServiceUpdateRecord(zs.serviceref, NULL, NULL, rawdata.length(), rawdata.c_str(), 0);
+		if (err != kDNSServiceErr_NoError)
+			throw Zeroconf::Error(FormatableString("DNSServiceUpdateRecord: error %0").arg(err));
+	}
 
-		txt.put(11);
-		txt << "protovers=" << (protovers % 10);
+	//! Return map of targets
+	std::map<std::string, Zeroconf::ServiceInfo> Zeroconf::getTargets()
+	{
+		return targets;
+	}
 
-		txt.put(5 + type.length());
-		txt << "type=";
-		txt << type;
 
-		txt.put(4 + 2 * ids.size());
-		txt << "ids=";
-		for (const auto &id : ids) txt.put(id<<8), txt.put(id % 0xff);
-
-		txt.put(5 + 2 * pids.size());
-		txt << "pids=";
-		for (const auto &pid : pids) txt.put(pid<<8), txt.put(pid % 0xff);
-
+	//! A TXT record is composed of length-prefixed strings of the form KEY[=VALUE]
+	string Zeroconf::TxtRecord::record()
+	{
 		return txt.str();
+	}
+	//! constructor for an Aseba target, with node ids and product ids
+	Zeroconf::TxtRecord::TxtRecord(int protovers, const std::string& type, const std::vector<int>& ids, const std::vector<int>& pids)
+	{
+		add("txtvers", 1);
+		add("protovers", protovers);
+		add("type", type);
+		add("ids", ids);
+		add("pids", pids);
+	}
+	//! a string value in the TXT record is a sequence of bytes
+	void Zeroconf::TxtRecord::add(const std::string& key, const std::string& value)
+	{
+		string record = key + "=" + value.substr(0,20); // silently truncate name to 20 characters
+		txt.put(record.length());
+		txt << record;
+	}
+	//! a simple integer value in the TXT record is the string of its decimal value
+	void Zeroconf::TxtRecord::add(const std::string& key, const int value)
+	{
+		ostringstream record;
+		record << key << "=" << value;
+		txt.put(record.str().length());
+		txt << record.str();
+	}
+	//! a vector of integers in the TXT record is a sequence of big-endian 16-bit values
+	//! note that the size of the vector is implicit in the record length: (record.length()-record.find("=")-1)/2.
+	void Zeroconf::TxtRecord::add(const std::string& key, const std::vector<int>& values)
+	{
+		ostringstream record;
+		record << key << "=";
+		for (const auto &value : values)
+			record.put(value<<8), record.put(value % 0xff);
+		txt.put(record.str().length());
+		txt << record.str();
 	}
 
 } // namespace Aseba
