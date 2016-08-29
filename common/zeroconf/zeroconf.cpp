@@ -18,10 +18,10 @@
 	along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "zeroconf.h"
 #include "../utils/utils.h"
 #include "../utils/FormatableString.h"
 #include <dashel/dashel.h>
+#include "zeroconf.h"
 
 using namespace std;
 
@@ -30,133 +30,165 @@ namespace Aseba
 	using namespace Dashel;
 
 	//! Register and announce a target described by a name and a port
-	void Zeroconf::registerPort(const string& name, const unsigned port, const string& txt)
+	void Zeroconf::registerService(const string& name, const unsigned port, const TxtRecord& txtrec)
 	{
-		ZeroconfService z{name,"_aseba._tcp.","local."};
+		DNSServiceRef serviceref;
+		string txt(txtrec.record());
 		uint16_t len = txt.size();
 		const char* record = txt.c_str();
-		DNSServiceErrorType err = DNSServiceRegister(&z.serviceref,
+		DNSServiceErrorType err = DNSServiceRegister(&serviceref,
 							     kDNSServiceFlagsDefault,
 							     0, // default all interfaces
 							     name.c_str(),
-							     "_aseba._tcp.",
-							     NULL, // use default domain
+							     "_aseba._tcp",
+							     NULL, // use default domain, usually "local."
 							     NULL, // use this host name
 							     htons(port),
 							     len, // TXT length
 							     record, // TXT record
 							     cb_Register,
-							     &z);
+							     this); // context pointer is this Zeroconf object
 		if (err != kDNSServiceErr_NoError)
 			throw Zeroconf::Error(FormatableString("DNSServiceRegister: error %0").arg(err));
 		else
 		{
-			DNSServiceErrorType err = DNSServiceProcessResult(z.serviceref); // block until daemon replies
-			if (err != kDNSServiceErr_NoError)
-				throw Zeroconf::Error(FormatableString("DNSServiceProcessResult: error %0").arg(err));
-			else
-			{
-				services[z.name] = z; // copy
-				z.serviceref = 0; // because now owned by services
-			}
+			pending[serviceref] = std::unique_ptr<ZeroconfService>(new ZeroconfService());;
+			// Responses from the DNS Service will subsequently be handled in the watcher thread,
+			// where they will be dispatched to Zeroconf::cb_Register by DNSServiceProcessResult.
 		}
 	}
 
 	//! Register and announce a target described by an existing Dashel stream
-	void Zeroconf::registerStream(const std::string& name, const Dashel::Stream* stream, const string& txt)
+	void Zeroconf::registerService(const std::string& name, const Dashel::Stream* stream, const TxtRecord& txtrec)
 	{
-		unsigned port = atoi(stream->getTargetParameter("port").c_str());
-		registerPort(name,port,txt);
-	}
-
-	//! Asynchronously update the set of known targets
-	void Zeroconf::browseForTargets()
-	{
-	}
-
-	//! callback to update ZeroconfService record with results of registration
-	void DNSSD_API Zeroconf::cb_Register(DNSServiceRef sdRef,
-					     DNSServiceFlags flags,
-					     DNSServiceErrorType errorCode,
-					     const char *name,
-					     const char *regtype,
-					     const char *domain,
-					     void *context)
-	{
-		if (errorCode != kDNSServiceErr_NoError)
-			throw Zeroconf::Error(FormatableString("DNSServiceRegisterReply: error %0").arg(errorCode));
-		else
-		{
-			ZeroconfService *zref = (ZeroconfService *)context;
-			zref->name = string(name);
-			zref->regtype = string(regtype);
-			zref->domain = string(domain);
-		}
-	}
-
-	//! Helper to format target info for DNS TXT record
-	string Zeroconf::txtRecord(int protovers, const std::string& type, const std::vector<int>& ids, const std::vector<int>& pids)
-	{
-		Zeroconf::TxtRecord t(protovers, type, ids, pids);
-		return t.record();
+		auto port = atoi(stream->getTargetParameter("port").c_str());
+		registerService(name,port,txtrec);
 	}
 
 	//! Replace TXT record with a new one, typically when node, pid lists change
 	void Zeroconf::updateTxtRecord(const std::string& name, TxtRecord& rec)
 	{
-		ZeroconfService zs = services[name];
+		auto sdRef = services[name]->serviceref;
 		string rawdata = rec.record();
-		DNSServiceErrorType err = DNSServiceUpdateRecord(zs.serviceref, NULL, NULL, rawdata.length(), rawdata.c_str(), 0);
+		DNSServiceErrorType err = DNSServiceUpdateRecord(sdRef, NULL, NULL, rawdata.length(), rawdata.c_str(), 0);
 		if (err != kDNSServiceErr_NoError)
 			throw Zeroconf::Error(FormatableString("DNSServiceUpdateRecord: error %0").arg(err));
 	}
 
+	//! Asynchronously update the set of known targets
+	void Zeroconf::browseForTargets()
+	{
+		DNSServiceRef serviceref;
+		DNSServiceErrorType err = DNSServiceBrowse(&serviceref,
+												   kDNSServiceFlagsDefault,
+												   0, // default all interfaces
+												   "_aseba._tcp",
+												   NULL, // use default domain, usually "local."
+												   cb_Browse,
+												   this); // context pointer is this Zeroconf object
+		if (err != kDNSServiceErr_NoError)
+			throw Zeroconf::Error(FormatableString("DNSServiceRegister: error %0").arg(err));
+		else
+		{
+			pending[serviceref] = std::unique_ptr<ZeroconfService>(new ZeroconfService());
+			// Responses from the DNS Service will subsequently be handled in the watcher thread,
+			// where they will be dispatched to Zeroconf::cb_Browse by DNSServiceProcessResult.
+		}
+
+	}
+
 	//! Return map of targets
-	std::map<std::string, Zeroconf::ServiceInfo> Zeroconf::getTargets()
+	Zeroconf::NameServiceInfoMap Zeroconf::getTargets()
 	{
 		return targets;
 	}
 
+	//! callback to update ZeroconfService record with results of registration
+	void DNSSD_API Zeroconf::cb_Register(DNSServiceRef sdRef,
+										 DNSServiceFlags flags,
+										 DNSServiceErrorType errorCode,
+										 const char *name,
+										 const char *regtype,
+										 const char *domain,
+										 void *context)
+	{
+		if (errorCode != kDNSServiceErr_NoError)
+			throw Zeroconf::Error(FormatableString("DNSServiceRegisterReply: error %0").arg(errorCode));
+		else
+		{
+			Zeroconf *zref = static_cast<Zeroconf *>(context);
 
-	//! A TXT record is composed of length-prefixed strings of the form KEY[=VALUE]
-	string Zeroconf::TxtRecord::record()
-	{
-		return txt.str();
+//			const auto it = zref->pending.find(sdRef);
+//			zref->services[name] = std::move(it->second);
+//			zref->pending.erase(it->first);
+			zref->services[name] = std::move(zref->pending[sdRef]);
+
+			zref->services[name]->serviceref = sdRef;
+			zref->services[name]->name = name;
+			zref->services[name]->domain = domain;
+		}
 	}
-	//! constructor for an Aseba target, with node ids and product ids
-	Zeroconf::TxtRecord::TxtRecord(int protovers, const std::string& type, const std::vector<int>& ids, const std::vector<int>& pids)
+
+	//! callback to update ZeroconfService record with results of browse
+	void DNSSD_API Zeroconf::cb_Browse(DNSServiceRef sdRef,
+										 DNSServiceFlags flags,
+									   uint32_t interfaceIndex,
+										 DNSServiceErrorType errorCode,
+										 const char *name,
+										 const char *regtype,
+										 const char *domain,
+										 void *context)
 	{
-		add("txtvers", 1);
-		add("protovers", protovers);
-		add("type", type);
-		add("ids", ids);
-		add("pids", pids);
+		if (errorCode != kDNSServiceErr_NoError)
+			throw Zeroconf::Error(FormatableString("DNSServiceBrowseReply: error %0").arg(errorCode));
+		else
+		{
+			Zeroconf *zref = static_cast<Zeroconf *>(context);
+			zref->targets[name] = { {"name",string(name)}, {"domain",string(domain)} };
+		}
 	}
-	//! a string value in the TXT record is a sequence of bytes
-	void Zeroconf::TxtRecord::add(const std::string& key, const std::string& value)
+
+	void Zeroconf::handleDnsServiceEvents()
 	{
-		string record = key + "=" + value.substr(0,20); // silently truncate name to 20 characters
-		txt.put(record.length());
-		txt << record;
-	}
-	//! a simple integer value in the TXT record is the string of its decimal value
-	void Zeroconf::TxtRecord::add(const std::string& key, const int value)
-	{
-		ostringstream record;
-		record << key << "=" << value;
-		txt.put(record.str().length());
-		txt << record.str();
-	}
-	//! a vector of integers in the TXT record is a sequence of big-endian 16-bit values
-	//! note that the size of the vector is implicit in the record length: (record.length()-record.find("=")-1)/2.
-	void Zeroconf::TxtRecord::add(const std::string& key, const std::vector<int>& values)
-	{
-		ostringstream record;
-		record << key << "=";
-		for (const auto &value : values)
-			record.put(value<<8), record.put(value % 0xff);
-		txt.put(record.str().length());
-		txt << record.str();
+		struct timeval tv{1,0}; //!< maximum time to learn about a new service (5 sec)
+
+		while (running)
+		{
+			if (pending.size() == 0)
+			{
+				//std::this_thread::sleep_for(std::chrono::seconds(5));
+				continue;
+			}
+			fd_set fds;
+			int max_fds(0);
+			FD_ZERO(&fds);
+			std::map<DNSServiceRef,int> serviceFd;
+
+			int fd_count(0);
+
+			for (auto const& srv: pending)
+			{
+				int fd = DNSServiceRefSockFD(srv.first);
+				if (fd != -1)
+				{
+					max_fds = max_fds > fd ? max_fds : fd;
+					FD_SET(fd, &fds);
+					serviceFd[srv.first] = fd;
+					fd_count++;
+				}
+			}
+			int result = select(max_fds+1, &fds, (fd_set*)NULL, (fd_set*)NULL, &tv);
+			if (result > 0)
+			{
+				for (auto const& srv: pending)
+					if (FD_ISSET(serviceFd[srv.first], &fds))
+						DNSServiceProcessResult(srv.first);
+			}
+			else if (result < 0)
+				throw Zeroconf::Error(FormatableString("handleDnsServiceEvents: select returned %0 errno %1").arg(result).arg(errno));
+			else
+				; // timeout, check for new services
+		}
 	}
 
 } // namespace Aseba

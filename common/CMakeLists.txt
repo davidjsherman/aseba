@@ -6,6 +6,7 @@ set (ASEBACOMMON_SRC
 	msg/msg.cpp
 	msg/NodesManager.cpp
 	zeroconf/zeroconf.cpp
+	zeroconf/txtrecord.cpp
 )
 add_library(asebacommon ${ASEBACOMMON_SRC})
 set_target_properties(asebacommon PROPERTIES VERSION ${LIB_VERSION_STRING} 
