@@ -60,50 +60,20 @@ namespace Aseba
 	class Zeroconf
 	{
 	public:
-		std::atomic_bool running{true}; //!< are we watching for DNS service updates?
-		std::thread watcher{&Zeroconf::handleDnsServiceEvents, this}; //~< thread in which select loop occurs
-		~Zeroconf()
-		{
-			running = false;
-			watcher.join(); // tell watcher to stop, to avoid std::terminate
-		}
-
-	public:
 		class TxtRecord;
-		typedef std::map<std::string, std::string> ServiceInfo; //!< (key, value) set
-		typedef std::map<std::string, Zeroconf::ServiceInfo> NameServiceInfoMap;
+		class Target;
+//		typedef std::map<std::string, std::string> Target; //!< (key, value) set
+		typedef std::map<std::string, Zeroconf::Target> NameTargetMap;
 
 	public:
-		virtual void registerService(const std::string& name, const unsigned port, const TxtRecord& txtrec);
-		virtual void registerService(const std::string& name, const Dashel::Stream* dashel_stream, const TxtRecord& txtrec);
-
-		virtual void updateTxtRecord(const std::string& name, TxtRecord& record);
+		virtual void updateTxtRecord(const Target& target, TxtRecord& record);
 
 		virtual void browseForTargets();
-		virtual NameServiceInfoMap getTargets();
-		
-	private:
-		//! Private class that encapsulates a service of type _aseba._tcp known to the mDNS-SD daemon
-		class ZeroconfService
-		{
-		public:
-			std::string name;
-			std::string regtype;
-			std::string domain;
-			DNSServiceRef serviceref;
-		public:
-			virtual ~ZeroconfService()
-			{   // release the service reference
-				if (serviceref)
-					DNSServiceRefDeallocate(serviceref);
-				serviceref = 0;
-			}
-			virtual bool operator==(const ZeroconfService &other) const
-			{
-				return name == other.name && domain == other.domain;
-			}
-		};
-		typedef std::map<std::string, std::unique_ptr<ZeroconfService>> NameServiceMap;
+		virtual NameTargetMap getTargets();
+		virtual std::string resolveTarget(Zeroconf::Target& target);
+
+		virtual void registerComplete(); //!< overridden in derived classes
+		virtual void browseComplete(); //!< overridden in derived classes
 
 	public:
 		//! An error in registering or browsing Zeroconf
@@ -113,20 +83,67 @@ namespace Aseba
 		};
 
 	private:
+		//! Private class that encapsulates an active service request to the mDNS-SD daemon
+		class ZeroconfDiscoveryRequest
+		{
+		public:
+			Target* target;
+			DNSServiceRef serviceref;
+		public:
+			virtual ~ZeroconfDiscoveryRequest()
+			{   // release the service reference
+				if (serviceref)
+					DNSServiceRefDeallocate(serviceref);
+				serviceref = 0;
+			}
+			virtual bool operator==(const ZeroconfDiscoveryRequest &other) const
+			{
+				return serviceref == other.serviceref;
+			}
+		};
+
+	protected:
+		typedef std::map<std::string, std::unique_ptr<ZeroconfDiscoveryRequest>> NameServiceMap;
+
+		virtual void assignSocket(int fd); //!< overridden in derived classes
+		virtual void releaseSocket(int fd); //!< overridden in derived classes
+		NameServiceMap services; //!< map friendly name to service record
+		NameTargetMap targets; //!< map friendly name to (key, value) set
+		std::map<DNSServiceRef, std::unique_ptr<ZeroconfDiscoveryRequest>> pending; //< map pending sdRef to service record
+		
+	private:
 		static void DNSSD_API cb_Register(DNSServiceRef, DNSServiceFlags, DNSServiceErrorType,
 										  const char *, const char *, const char *, void *);
 		static void DNSSD_API cb_Browse(DNSServiceRef, DNSServiceFlags, uint32_t interfaceIndex, DNSServiceErrorType,
 										  const char *, const char *, const char *, void *);
-
-		NameServiceMap services; //!< map friendly name to service record
-		NameServiceInfoMap targets; //!< map friendly name to (key, value) set
-		std::map<DNSServiceRef, std::unique_ptr<ZeroconfService>> pending; //< map pending sdRef to service record
-
-		void handleDnsServiceEvents(); //! run the handleDSEvents_thread
+		void registerTarget(Target& target, const TxtRecord& txtrec);
 	};
 
 	/**
-	 \addtogroup zeroconf Zeroconf (mDNS-SD multicast DNS Service Discovery)
+	 \addtogroup zeroconf
+
+		A Zeroconf::Target allows client classes to choose and access Aseba targets.
+	 */
+	class Zeroconf::Target
+	{
+	public:
+		std::string name;
+		int port;
+		std::string domain{"local."};
+		const std::string regtype{"_aseba._tcp"};
+	public:
+		Target(const Dashel::Stream* dashel_stream);
+		virtual void advertise(const Zeroconf& zeroconf, const TxtRecord& txtrec);
+
+		std::map<std::string, std::string> properties;
+		virtual bool operator==(const Target &other) const
+		{
+			return name == other.name && domain == other.domain;
+		}
+	};
+
+	/**
+	 \addtogroup zeroconf
 
 		Zeroconf records three DNS records for each service: a PTR for the
 		symbolic name, an SRV for the actual host and port number, and a TXT
@@ -136,7 +153,7 @@ namespace Aseba
 		The TXT record for Aseba targets specifies the target type, the Aseba
 		protocol version, a list of node ids, and a list of node product ids.
 	 */
-	
+
 	class Zeroconf::TxtRecord
 	{
 	public:

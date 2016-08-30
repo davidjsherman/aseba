@@ -30,7 +30,7 @@ namespace Aseba
 	using namespace Dashel;
 
 	//! Register and announce a target described by a name and a port
-	void Zeroconf::registerService(const string& name, const unsigned port, const TxtRecord& txtrec)
+	void Zeroconf::registerTarget(Zeroconf::Target& target, const TxtRecord& txtrec)
 	{
 		DNSServiceRef serviceref;
 		string txt(txtrec.record());
@@ -39,11 +39,11 @@ namespace Aseba
 		DNSServiceErrorType err = DNSServiceRegister(&serviceref,
 							     kDNSServiceFlagsDefault,
 							     0, // default all interfaces
-							     name.c_str(),
+							     target.name.c_str(),
 							     "_aseba._tcp",
 							     NULL, // use default domain, usually "local."
 							     NULL, // use this host name
-							     htons(port),
+							     htons(target.port),
 							     len, // TXT length
 							     record, // TXT record
 							     cb_Register,
@@ -52,23 +52,22 @@ namespace Aseba
 			throw Zeroconf::Error(FormatableString("DNSServiceRegister: error %0").arg(err));
 		else
 		{
-			pending[serviceref] = std::unique_ptr<ZeroconfService>(new ZeroconfService());;
+			pending[serviceref] = std::unique_ptr<ZeroconfDiscoveryRequest>(new ZeroconfDiscoveryRequest());;
 			// Responses from the DNS Service will subsequently be handled in the watcher thread,
 			// where they will be dispatched to Zeroconf::cb_Register by DNSServiceProcessResult.
 		}
 	}
 
 	//! Register and announce a target described by an existing Dashel stream
-	void Zeroconf::registerService(const std::string& name, const Dashel::Stream* stream, const TxtRecord& txtrec)
+	Zeroconf::Target::Target(const Dashel::Stream* stream)
 	{
-		auto port = atoi(stream->getTargetParameter("port").c_str());
-		registerService(name,port,txtrec);
+		port = atoi(stream->getTargetParameter("port").c_str());
 	}
 
 	//! Replace TXT record with a new one, typically when node, pid lists change
-	void Zeroconf::updateTxtRecord(const std::string& name, TxtRecord& rec)
+	void Zeroconf::updateTxtRecord(const Zeroconf::Target& target, TxtRecord& rec)
 	{
-		auto sdRef = services[name]->serviceref;
+		auto sdRef = services[target.name]->serviceref;
 		string rawdata = rec.record();
 		DNSServiceErrorType err = DNSServiceUpdateRecord(sdRef, NULL, NULL, rawdata.length(), rawdata.c_str(), 0);
 		if (err != kDNSServiceErr_NoError)
@@ -90,20 +89,21 @@ namespace Aseba
 			throw Zeroconf::Error(FormatableString("DNSServiceRegister: error %0").arg(err));
 		else
 		{
-			pending[serviceref] = std::unique_ptr<ZeroconfService>(new ZeroconfService());
+			pending[serviceref] = std::unique_ptr<ZeroconfDiscoveryRequest>(new ZeroconfDiscoveryRequest());
 			// Responses from the DNS Service will subsequently be handled in the watcher thread,
 			// where they will be dispatched to Zeroconf::cb_Browse by DNSServiceProcessResult.
+			sleep(5); // hack to wait for answers
 		}
 
 	}
 
 	//! Return map of targets
-	Zeroconf::NameServiceInfoMap Zeroconf::getTargets()
+	Zeroconf::NameTargetMap Zeroconf::getTargets()
 	{
 		return targets;
 	}
 
-	//! callback to update ZeroconfService record with results of registration
+	//! callback to update ZeroconfTarget record with results of registration
 	void DNSSD_API Zeroconf::cb_Register(DNSServiceRef sdRef,
 										 DNSServiceFlags flags,
 										 DNSServiceErrorType errorCode,
@@ -124,12 +124,12 @@ namespace Aseba
 			zref->services[name] = std::move(zref->pending[sdRef]);
 
 			zref->services[name]->serviceref = sdRef;
-			zref->services[name]->name = name;
-			zref->services[name]->domain = domain;
+//			zref->services[name]->name = name;
+//			zref->services[name]->domain = domain;
 		}
 	}
 
-	//! callback to update ZeroconfService record with results of browse
+	//! callback to update ZeroconfDiscoveryRequest record with results of browse
 	void DNSSD_API Zeroconf::cb_Browse(DNSServiceRef sdRef,
 										 DNSServiceFlags flags,
 									   uint32_t interfaceIndex,
@@ -144,51 +144,7 @@ namespace Aseba
 		else
 		{
 			Zeroconf *zref = static_cast<Zeroconf *>(context);
-			zref->targets[name] = { {"name",string(name)}, {"domain",string(domain)} };
+			zref->targets[name].properties = { {"name",string(name)}, {"domain",string(domain)} };
 		}
 	}
-
-	void Zeroconf::handleDnsServiceEvents()
-	{
-		struct timeval tv{1,0}; //!< maximum time to learn about a new service (5 sec)
-
-		while (running)
-		{
-			if (pending.size() == 0)
-			{
-				//std::this_thread::sleep_for(std::chrono::seconds(5));
-				continue;
-			}
-			fd_set fds;
-			int max_fds(0);
-			FD_ZERO(&fds);
-			std::map<DNSServiceRef,int> serviceFd;
-
-			int fd_count(0);
-
-			for (auto const& srv: pending)
-			{
-				int fd = DNSServiceRefSockFD(srv.first);
-				if (fd != -1)
-				{
-					max_fds = max_fds > fd ? max_fds : fd;
-					FD_SET(fd, &fds);
-					serviceFd[srv.first] = fd;
-					fd_count++;
-				}
-			}
-			int result = select(max_fds+1, &fds, (fd_set*)NULL, (fd_set*)NULL, &tv);
-			if (result > 0)
-			{
-				for (auto const& srv: pending)
-					if (FD_ISSET(serviceFd[srv.first], &fds))
-						DNSServiceProcessResult(srv.first);
-			}
-			else if (result < 0)
-				throw Zeroconf::Error(FormatableString("handleDnsServiceEvents: select returned %0 errno %1").arg(result).arg(errno));
-			else
-				; // timeout, check for new services
-		}
-	}
-
 } // namespace Aseba

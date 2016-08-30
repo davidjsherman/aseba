@@ -5,9 +5,21 @@ set (ASEBACOMMON_SRC
 	utils/BootloaderInterface.cpp
 	msg/msg.cpp
 	msg/NodesManager.cpp
-	zeroconf/zeroconf.cpp
-	zeroconf/txtrecord.cpp
 )
+
+find_path(DNSSD_INCLUDE_DIR dns_sd.h)
+if(DNSSD_INCLUDE_DIR)
+	set(ZEROCONF_FOUND 1)
+	set(ASEBACOMMON_SRC
+		${ASEBACOMMON_SRC}
+		zeroconf/zeroconf.cpp
+		zeroconf/txtrecord.cpp
+		zeroconf/zeroconf-thread.cpp
+		zeroconf/zeroconf-dashelhub.cpp
+		zeroconf/zeroconf-qt.cpp
+	)
+endif(DNSSD_INCLUDE_DIR)
+
 add_library(asebacommon ${ASEBACOMMON_SRC})
 set_target_properties(asebacommon PROPERTIES VERSION ${LIB_VERSION_STRING} 
                                         SOVERSION ${LIB_VERSION_MAJOR})
@@ -32,6 +44,9 @@ set (ASEBACORE_HDR_COMMON
 )
 set (ASEBACORE_HDR_ZEROCONF
 	zeroconf/zeroconf.h
+	zeroconf/zeroconf-thread.h
+	zeroconf/zeroconf-dashelhub.h
+	zeroconf/zeroconf-qt.h
 )
 install(FILES ${ASEBACORE_HDR_UTILS}
 	DESTINATION include/aseba/common/utils
@@ -42,6 +57,8 @@ install(FILES ${ASEBACORE_HDR_MSG}
 install(FILES ${ASEBACORE_HDR_COMMON}
 	DESTINATION include/aseba/common
 )
-install(FILES ${ASEBACORE_HDR_ZEROCONF}
-	DESTINATION include/aseba/common/msg
-)
+if(ZEROCONF_FOUND)
+	install(FILES ${ASEBACORE_HDR_ZEROCONF}
+		DESTINATION include/aseba/common/msg
+	)
+endif(ZEROCONF_FOUND)
