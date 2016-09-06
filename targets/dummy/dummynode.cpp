@@ -349,10 +349,24 @@ int main(int argc, char* argv[])
 	Dashel::Stream* listen = node.listen(do_delta ? port+deltaNodeId : port, deltaNodeId);
 
 	Aseba::Zeroconf zs;
-	std::string txt_record = Aseba::Zeroconf::txtRecord(ASEBA_PROTOCOL_VERSION, "Unknown", {1+deltaNodeId}, {ASEBA_PID_UNDEFINED});
-	zs.registerPort(nodeDescription.name, atoi(listen->getTargetParameter("port").c_str()), txt_record);
+
+	Aseba::Zeroconf::Target dummy{nodeDescription.name, atoi(listen->getTargetParameter("port").c_str())};
+
+//	Aseba::Zeroconf::TxtRecord txt_record(ASEBA_PROTOCOL_VERSION, "Dummy Node", {1+deltaNodeId}, {ASEBA_PID_UNDEFINED});
+	Aseba::Zeroconf::TxtRecord txt_record(ASEBA_PROTOCOL_VERSION, "Dummy Node", {}, {});
+
+	dummy.advertise(zs, txt_record);
 
 	std::cout << "tcp:port=" << listen->getTargetParameter("port") << std::endl;
+
+	sleep(5);
+	txt_record.assign("ids", std::vector<int>{1+deltaNodeId});
+	txt_record.assign("pids", std::vector<int>{ASEBA_PID_UNDEFINED});
+	zs.updateTxtRecord(dummy, txt_record);
+
+	sleep(5);
+	zs.browseForTargets();
+	Aseba::Zeroconf::NameTargetMap targets = zs.getTargets();
 
 	node.run();
 }

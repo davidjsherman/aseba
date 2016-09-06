@@ -1,22 +1,22 @@
 /*
 	Aseba - an event-based framework for distributed robot control
 	Copyright (C) 2007--2016:
-		Stephane Magnenat <stephane at magnenat dot net>
-		(http://stephane.magnenat.net)
-		and other contributors, see authors.txt for details
-	
+ Stephane Magnenat <stephane at magnenat dot net>
+ (http://stephane.magnenat.net)
+ and other contributors, see authors.txt for details
+
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Lesser General Public License as published
 	by the Free Software Foundation, version 3 of the License.
-	
+
 	This program is distributed in the hope that it will be useful,
 	but WITHOUT ANY WARRANTY; without even the implied warranty of
 	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 	GNU Lesser General Public License for more details.
-	
+
 	You should have received a copy of the GNU Lesser General Public License
 	along with this program. If not, see <http://www.gnu.org/licenses/>.
-*/
+ */
 
 #ifndef ASEBA_ZEROCONF
 #define ASEBA_ZEROCONF
@@ -62,18 +62,18 @@ namespace Aseba
 	public:
 		class TxtRecord;
 		class Target;
-//		typedef std::map<std::string, std::string> Target; //!< (key, value) set
-		typedef std::map<std::string, Zeroconf::Target> NameTargetMap;
+		//		typedef std::map<std::string, std::string> Target; //!< (key, value) set
+		typedef std::map<std::string, Zeroconf::Target*> NameTargetMap;
 
 	public:
 		virtual void updateTxtRecord(const Target& target, TxtRecord& record);
 
 		virtual void browseForTargets();
 		virtual NameTargetMap getTargets();
-		virtual std::string resolveTarget(Zeroconf::Target& target);
+		virtual std::string resolveTarget(Zeroconf::Target& target) {}
 
-		virtual void registerComplete(); //!< overridden in derived classes
-		virtual void browseComplete(); //!< overridden in derived classes
+		virtual void registerComplete() {} //!< overridden in derived classes
+		virtual void browseComplete() {} //!< overridden in derived classes
 
 	public:
 		//! An error in registering or browsing Zeroconf
@@ -105,18 +105,18 @@ namespace Aseba
 	protected:
 		typedef std::map<std::string, std::unique_ptr<ZeroconfDiscoveryRequest>> NameServiceMap;
 
-		virtual void assignSocket(int fd); //!< overridden in derived classes
-		virtual void releaseSocket(int fd); //!< overridden in derived classes
+		virtual void assignSocket(int fd) {} //!< overridden in derived classes
+		virtual void releaseSocket(int fd) {} //!< overridden in derived classes
 		NameServiceMap services; //!< map friendly name to service record
 		NameTargetMap targets; //!< map friendly name to (key, value) set
 		std::map<DNSServiceRef, std::unique_ptr<ZeroconfDiscoveryRequest>> pending; //< map pending sdRef to service record
-		
+
 	private:
 		static void DNSSD_API cb_Register(DNSServiceRef, DNSServiceFlags, DNSServiceErrorType,
 										  const char *, const char *, const char *, void *);
 		static void DNSSD_API cb_Browse(DNSServiceRef, DNSServiceFlags, uint32_t interfaceIndex, DNSServiceErrorType,
-										  const char *, const char *, const char *, void *);
-		void registerTarget(Target& target, const TxtRecord& txtrec);
+										const char *, const char *, const char *, void *);
+		void registerTarget(const Target * target, const TxtRecord& txtrec);
 	};
 
 	/**
@@ -132,8 +132,9 @@ namespace Aseba
 		std::string domain{"local."};
 		const std::string regtype{"_aseba._tcp"};
 	public:
+		Target(const std::string & name, const int & port);
 		Target(const Dashel::Stream* dashel_stream);
-		virtual void advertise(const Zeroconf& zeroconf, const TxtRecord& txtrec);
+		virtual void advertise(Zeroconf& zeroconf, const TxtRecord& txtrec);
 
 		std::map<std::string, std::string> properties;
 		virtual bool operator==(const Target &other) const
@@ -167,6 +168,15 @@ namespace Aseba
 		std::map<std::string, std::string> fields;
 		virtual void add(std::ostringstream& txt, const std::string& key) const;
 	};
+
+
+
+
+
+
+
+
+
 
 	/*@}*/
 } // namespace Aseba
