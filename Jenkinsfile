@@ -15,7 +15,7 @@ pipeline {
 		stringParam(defaultValue: 'master', description: 'Dashel branch', name: 'branch_dashel')
 		stringParam(defaultValue: 'master', description: 'Enki branch', name: 'branch_enki')
 	}
-	
+
 	stages {
 		stage('Prepare') {
 			steps {
@@ -146,14 +146,17 @@ pipeline {
 							unstash 'dist-dashel-windows'
 							unstash 'dist-enki-windows'
 							script {
-								env.windows_dashel_DIR = sh ( script: 'dirname $(find $PWD/dist/windows -name dashelConfig.cmake | head -1)', returnStdout: true).trim()
-								env.windows_enki_DIR = sh ( script: 'dirname $(find $PWD/dist/windows -name enkiConfig.cmake | head -1)', returnStdout: true).trim()
-							}
+								export env.windows_dashel_DIR = sh ( script: 'dirname $(find $PWD/dist/windows -name dashelConfig.cmake | head -1)', returnStdout: true).trim()
+								export env.windows_enki_DIR = sh ( script: 'dirname $(find $PWD/dist/windows -name enkiConfig.cmake | head -1)', returnStdout: true).trim()
+                echo $env.windows_dashel_DIR
+                echo $env.windows_dashel_DIR
+                echo $PWD
+              }
 							unstash 'source'
 							CMake([sourceDir: '$workDir/aseba', label: 'windows', preloadScript: 'set -x',
 								envs: [ "dashel_DIR=${env.windows_dashel_DIR}", "enki_DIR=${env.windows_enki_DIR}" ] ])
 							stash includes: 'dist/**', name: 'dist-aseba-windows'
-							// stash includes: 'build/**', name: 'build-aseba-windows'
+							stash includes: 'build/**', name: 'build-aseba-windows'
 						}
 					}
 				)
@@ -188,9 +191,9 @@ pipeline {
 		}
 		stage('Package') {
 			// Packages are only built for the master branch
-			when {
-				env.BRANCH == 'master'
-			}
+			 //when {
+				//env.BRANCH == 'master'
+			//}
 			steps {
 				parallel (
 					"debian-pack" : {
@@ -223,7 +226,19 @@ pipeline {
 							'''
 							archiveArtifacts artifacts: 'Aseba*.dmg', fingerprint: true, onlyIfSuccessful: true
 						}
-					}
+					},
+          "windows-pack" : {
+            node('windows') {
+            unstash 'build-aseba-windows'
+            git branch: 'master', url: 'https://github.com/davidjsherman/aseba-windows.git'
+            sh '''
+              export WORKSPACE=$PWD
+              ./aseba-windows/build.sh
+            '''
+            archiveArtifacts artifacts: 'aseba*.exe' 'scratch*.zip', fingerprint: true, onlyIfSuccessful: true
+
+            }
+          }
 				)
 			}
 		}
