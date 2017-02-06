@@ -148,7 +148,7 @@ pipeline {
 							script {
 								env.windows_dashel_DIR = sh ( script: 'dirname $(find $PWD/dist/windows -name dashelConfig.cmake | head -1)', returnStdout: true).trim()
 								env.windows_enki_DIR = sh ( script: 'dirname $(find $PWD/dist/windows -name enkiConfig.cmake | head -1)', returnStdout: true).trim()
-                sh( echo $PWD) 
+                sh "echo $PWD" 
               }
 							unstash 'source'
 							CMake([sourceDir: '$workDir/aseba', label: 'windows', preloadScript: 'set -x',
