@@ -235,7 +235,9 @@ pipeline {
               export WORKSPACE=$PWD
               ./aseba-windows/build.sh
             '''
-            archiveArtifacts artifacts: 'aseba*.exe' 'scratch*.zip', fingerprint: true, onlyIfSuccessful: true
+            archiveArtifacts artifacts: 'scratch*.zip', fingerprint: true, onlyIfSuccessful: true
+						archiveArtifacts artifacts: 'aseba*.exe', fingerprint: true, onlyIfSuccessful: true
+
 
             }
           }
