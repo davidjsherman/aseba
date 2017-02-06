@@ -230,8 +230,7 @@ pipeline {
             unstash 'build-aseba-windows'
             git branch: 'master', url: 'https://github.com/davidjsherman/aseba-windows.git'
             sh '''
-						  ls
-							echo $PWD
+	            mv externals/* . # move stash on dashel and enki folders
               export WORKSPACE=$PWD
               ./build.sh
             '''
