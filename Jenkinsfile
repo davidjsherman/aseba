@@ -146,10 +146,8 @@ pipeline {
 							unstash 'dist-dashel-windows'
 							unstash 'dist-enki-windows'
 							script {
-								export env.windows_dashel_DIR = sh ( script: 'dirname $(find $PWD/dist/windows -name dashelConfig.cmake | head -1)', returnStdout: true).trim()
-								export env.windows_enki_DIR = sh ( script: 'dirname $(find $PWD/dist/windows -name enkiConfig.cmake | head -1)', returnStdout: true).trim()
-                echo $env.windows_dashel_DIR
-                echo $env.windows_dashel_DIR
+								env.windows_dashel_DIR = sh ( script: 'dirname $(find $PWD/dist/windows -name dashelConfig.cmake | head -1)', returnStdout: true).trim()
+								env.windows_enki_DIR = sh ( script: 'dirname $(find $PWD/dist/windows -name enkiConfig.cmake | head -1)', returnStdout: true).trim()
                 echo $PWD
               }
 							unstash 'source'
@@ -216,14 +214,14 @@ pipeline {
 						node('macos') {
 							unstash 'build-aseba-macos'
 							git branch: 'inherit-env', url: 'https://github.com/davidjsherman/aseba-osx.git'
-							//sh '''
-						//		[ -d source ] || ln -s . source
-							//	export your_qt_path=$(otool -L dist/macos/bin/asebastudio | grep QtCore | perl -pe "s{\\s*(/.*)lib/QtCore.*}{\\$1}")
-								//export your_qwt_path=$(otool -L dist/macos/bin/asebastudio | grep qwt.framework | perl -pe "s{\\s*(/.*)lib/QtCore.*}{\\$1}")
-								//export your_certificate=none
-								//mkdir -p build/packager &&
-									//(cd build/packager && bash -x ../../packager/packager_script && mv Aseba*.dmg ../..)
-							//'''
+							sh '''
+								[ -d source ] || ln -s . source
+								export your_qt_path=$(otool -L dist/macos/bin/asebastudio | grep QtCore | perl -pe "s{\\s*(/.*)lib/QtCore.*}{\\$1}")
+								export your_qwt_path=$(otool -L dist/macos/bin/asebastudio | grep qwt.framework | perl -pe "s{\\s*(/.*)lib/QtCore.*}{\\$1}")
+								export your_certificate=none
+								mkdir -p build/packager &&
+									(cd build/packager && bash -x ../../packager/packager_script && mv Aseba*.dmg ../..)
+							'''
 							archiveArtifacts artifacts: 'Aseba*.dmg', fingerprint: true, onlyIfSuccessful: true
 						}
 					},
@@ -231,10 +229,10 @@ pipeline {
             node('windows') {
             unstash 'build-aseba-windows'
             git branch: 'master', url: 'https://github.com/davidjsherman/aseba-windows.git'
-          //  sh '''
-          //    export WORKSPACE=$PWD
-          //    ./aseba-windows/build.sh
-          //  '''
+            sh '''
+              export WORKSPACE=$PWD
+              ./aseba-windows/build.sh
+            '''
             archiveArtifacts artifacts: 'scratch*.zip', fingerprint: true, onlyIfSuccessful: true
 						archiveArtifacts artifacts: 'aseba*.exe', fingerprint: true, onlyIfSuccessful: true
 
