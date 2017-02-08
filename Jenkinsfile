@@ -114,6 +114,7 @@ pipeline {
 						node('debian') {
 							unstash 'dist-dashel-debian'
 							unstash 'dist-enki-debian'
+							def workDir = pwd()
 							script {
 								env.debian_dashel_DIR = sh ( script: 'dirname $(find $PWD/dist/debian -name dashelConfig.cmake | head -1)', returnStdout: true).trim()
 								env.debian_enki_DIR = sh ( script: 'dirname $(find $PWD/dist/debian -name enkiConfig.cmake | head -1)', returnStdout: true).trim()
@@ -129,6 +130,7 @@ pipeline {
 						node('macos') {
 							unstash 'dist-dashel-macos'
 							unstash 'dist-enki-macos'
+							def workDir = pwd()
 							script {
 								env.macos_dashel_DIR = sh ( script: 'dirname $(find $PWD/dist/macos -name dashelConfig.cmake | head -1)', returnStdout: true).trim()
 								env.macos_enki_DIR = sh ( script: 'dirname $(find $PWD/dist/macos -name enkiConfig.cmake | head -1)', returnStdout: true).trim()
@@ -145,6 +147,7 @@ pipeline {
 						node('windows') {
 							unstash 'dist-dashel-windows'
 							unstash 'dist-enki-windows'
+							def workDir = pwd() 
 							script {
 								env.windows_dashel_DIR = sh ( script: 'dirname $(find $PWD/dist/windows -name dashelConfig.cmake | head -1)', returnStdout: true).trim()
 								env.windows_enki_DIR = sh ( script: 'dirname $(find $PWD/dist/windows -name enkiConfig.cmake | head -1)', returnStdout: true).trim()
