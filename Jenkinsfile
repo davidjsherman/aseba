@@ -12,8 +12,8 @@ pipeline {
 	// Jenkins will prompt for parameters when a branch is build manually
 	// but will use default parameters when the entire project is built.
 	parameters {
-		stringParam(defaultValue: 'master', description: 'Dashel branch', name: 'branch_dashel')
-		stringParam(defaultValue: 'master', description: 'Enki branch', name: 'branch_enki')
+		string(defaultValue: 'master', description: 'Dashel branch', name: 'branch_dashel')
+		string(defaultValue: 'master', description: 'Enki branch', name: 'branch_enki')
 	}
 
 	stages {
@@ -176,7 +176,7 @@ pipeline {
 		stage('Extended Test') {
 			// Extended tests are only run for the master branch.
 			when {
-				env.BRANCH == 'master'
+        environment name: "branch", value: "master"
 			}
 			steps {
 				node('debian') {
@@ -189,9 +189,9 @@ pipeline {
 		}
 		stage('Package') {
 			// Packages are only built for the master branch
-			 //when {
-				//env.BRANCH == 'master'
-			//}
+			when {
+        environment name: "branch", value: "master"
+			}
 			steps {
 				parallel (
 					"debian-pack" : {
