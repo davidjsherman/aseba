@@ -227,8 +227,12 @@ pipeline {
 					},
           "windows-pack" : {
             node('windows') {
+						sh "echo 'findemeeasy1' && pwd && ls -l"
             unstash 'build-aseba-windows'
+						sh "echo 'findemeeasy2' && pwd && ls -l"
             git branch: 'master', url: 'https://github.com/davidjsherman/aseba-windows.git'
+						sh "echo 'findemeeasy3' && pwd && ls -l"
+
             sh '''
 	            mv externals/* . # move stash on dashel and enki folders
               export WORKSPACE=$PWD
