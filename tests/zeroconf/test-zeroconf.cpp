@@ -77,3 +77,37 @@ SCENARIO( "Aseba::Zeroconf is a container", "[container]" ) {
 		}
 	}
 }
+
+SCENARIO( "Aseba::Zeroconf targets can be advertised and browsed", "[local]" ) {
+	GIVEN( "Zeroconf collection with 10 local targets" ) {
+		Aseba::Zeroconf zs;
+
+		// Add 10 local targets
+		for (int i=0; i<10; ++i)
+		{
+			// purposefully create name conflict
+			Aseba::Zeroconf::TxtRecord txt{5, "Fizbin", {10,20}, {8,8}};
+			zs.insert("Fizbin", 33333+i).advertise(txt);
+		}
+		REQUIRE( zs.size() == 10 );
+		
+		WHEN( "targets are browsed" ) {
+			zs.browse();
+			THEN( "resolved target has correct metadata" ) {
+				for (auto & target: zs)
+				{
+					// Resolve the host name and port of this target, retrieve TXT record
+					target.resolve();
+					REQUIRE( target.port >= 33333);
+					REQUIRE( target.name.find("Fizbin") == 0 );
+					REQUIRE( target.host.find("localhost") == 0 );
+					REQUIRE( target.regtype.find("_aseba._tcp") == 0 );
+					for (auto const& field: target.properties)
+					{
+						REQUIRE( field.second.length() > 0 );
+					}
+				}
+			}
+		}
+	}
+}
