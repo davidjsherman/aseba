@@ -34,64 +34,45 @@ Dashel::Stream* mock_stream = mock.listen();
 */
 
 SCENARIO( "Aseba::Zeroconf is a container", "[container]" ) {
-//	auto fizbin_i = zs.begin();
-	
-	GIVEN( "Zeroconf collection was created" ) {
+	GIVEN( "Zeroconf collection initialized by name and by stream" ) {
 		Aseba::Zeroconf zs;
-
 		REQUIRE( zs.size() == 0 );
-		REQUIRE( zs.find("fizbin") == zs.end() );
+
+		zs.insert("Fizbin", 33333); // explicit name
+		zs.insert(mock_stream); // generated name Aseba Local
+		REQUIRE( zs.size() == 2 );
 		
-		WHEN( "target is inserted by name" ) {
-			zs.insert("Fizbin", 33333);
+		WHEN( "targets are searched for" ) {
 			auto fizbin_i = zs.find("Fizbin");
-			THEN( "collection not empty and contains target" ) {
+			auto foobar_i = zs.find("Aseba Local");
+			THEN( "both targets are found" ) {
+				REQUIRE( fizbin_i != zs.end() );
+				REQUIRE( fizbin_i->name.find("Fizbin") == 0 );
+				REQUIRE( foobar_i != zs.end() );
+				REQUIRE( foobar_i->name.find("Aseba Local") == 0 );
+			}
+		}
+		
+		WHEN( "targets are traversed with a loop" ) {
+			for (auto & target: zs)
+			{
+				REQUIRE( target.regtype.find("_aseba._tcp") == 0 );
+				REQUIRE( target.domain.find("local.") == 0 );
+				REQUIRE( target.local == true );
+			}
+		}
+		
+		WHEN( "targets are erased" ) {
+			zs.erase(zs.begin()+1);
+			auto fizbin_i = zs.find("Fizbin");
+			THEN( "collection contains Fizbin but not Aseba Local" ) {
 				REQUIRE( zs.size() == 1 );
 				REQUIRE( fizbin_i != zs.end() );
 				REQUIRE( fizbin_i->name.find("Fizbin") == 0 );
 			}
-			
-			//			fizbin_i = zs.find("Fizbin");
-			//			REQUIRE( fizbin_i != zs.end() );
-			//			Aseba::Zeroconf::TxtRecord txt{5, "Fizbin Foobar", {1,2}, {99,99} };
-			//			fizbin_i->updateTxtRecord(txt);
-			//			THEN( "target txtrecord is updated" ) {
-			//				REQUIRE( fizbin_i->properties["ids"].size() == 2 );
-			//				REQUIRE( fizbin_i->properties["pids"].size() == 2 );
-			//			}
-			
-			WHEN( "targets is inserted from stream" ) {
-				zs.insert(mock_stream);
-				auto foobar_i = zs.find("Aseba Local");
-				THEN( "collection not empty and contains fizbin" ) {
-					REQUIRE( zs.size() == 2 );
-					REQUIRE( foobar_i != zs.end() );
-					REQUIRE( foobar_i->name.find("Aseba Local") == 0 );
-				}
-				
-				WHEN( "targets are traversed with a loop" ) {
-					for (auto & target: zs)
-					{
-						REQUIRE( target.regtype.find("_aseba._tcp") == 0 );
-						REQUIRE( target.domain.find("local.") == 0 );
-						REQUIRE( target.local == true );
-					}
-					
-					WHEN( "target is erased" ) {
-						zs.erase(zs.begin()+1);
-						auto fizbin_i = zs.find("Fizbin");
-						THEN( "collection contains Fizbin but not Aseba Local" ) {
-							REQUIRE( zs.size() == 1 );
-							REQUIRE( fizbin_i != zs.end() );
-							REQUIRE( fizbin_i->name.find("Fizbin") == 0 );
-						}
-						
-						WHEN( "target is cleared" ) {
-							zs.clear();
-							REQUIRE( zs.size() == 0 );
-						}
-					}
-				}
+			zs.clear();
+			THEN( "clearing collection removes all elements" ) {
+				REQUIRE( zs.size() == 0 );
 			}
 		}
 	}
