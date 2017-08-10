@@ -37,9 +37,11 @@ SCENARIO( "Aseba::Zeroconf can advertise local targets" ) {
 		WHEN( "target advertised by name" ) {
 			Aseba::Zeroconf::TxtRecord txt{5, "Foobar", {1}, {8}};
 			publisher.advertise("Foobar", 31415, txt);
-			// no delay seems necessary
-			spy.browse();
-			sleep(4); // allow time for browser to look for Foobar
+			sleep(2);
+			THEN( "browse for target" ) {
+				spy.browse();
+				sleep(8); // allow time for browser to look for Foobar
+			}
 		}
 	}
 }
@@ -67,38 +69,41 @@ SCENARIO( "Aseba::Zeroconf targets can be advertised and browsed", "[local]" ) {
 				Aseba::Zeroconf::TxtRecord txt{5, "Fizbin", {10,20}, {8,8}};
 				publisher.advertise("Fizbin", 33333+i, txt);
 			}
-		}
-		
-		WHEN( "targets are browsed" ) {
-			browser.browse();
-			sleep(12); // allow time for browser to look for the Fizbins
-			THEN( "correct number of targets is found" ) {
-				REQUIRE( browser.targets.size() == 10);
-			}
-			THEN( "resolved target has correct metadata" ) {
-				for (auto target: browser.targets)
-				{
-					REQUIRE( target.port >= 33333);
-					REQUIRE( target.name.find("Fizbin") == 0 );
-					REQUIRE( target.domain.find("local.") == 0 );
-					REQUIRE( target.regtype.find("_aseba._tcp") == 0 );
-					for (auto const& field: target.properties)
-					{
-						REQUIRE( field.second.length() > 0 );
+			THEN( "advertised targets can be seen" ) {
+				WHEN( "targets are browsed" ) {
+					browser.browse();
+					sleep(60); // allow time for browser to look for the Fizbins
+					THEN( "correct number of targets is found by browsing" ) {
+						REQUIRE( browser.targets.size() == 11);
 					}
-				}
-			}
-		}
-		WHEN( "target is removed" ) {
-			publisher.forget("Fizbin", 33333+0);
-			browser.browse();
-			THEN( "correct number of targets is found" ) {
-				REQUIRE( browser.targets.size() == 10);
-			}
-			THEN( "resolved target has correct metadata" ) {
-				for (auto target: browser.targets)
-				{
-					REQUIRE( target.name.find("Fizbin") == 0 );
+					THEN( "resolved targets have correct metadata" ) {
+						for (auto target: browser.targets)
+						{
+							REQUIRE( target.port >= 33333);
+							REQUIRE( target.name.find("Fizbin") == 0 );
+							REQUIRE( target.domain.find("local.") == 0 );
+							REQUIRE( target.regtype.find("_aseba._tcp") == 0 );
+							for (auto const& field: target.properties)
+							{
+								REQUIRE( field.second.length() > 0 );
+							}
+						}
+					}
+					THEN( "targets can be removed" ) {
+						WHEN( "target is removed" ) {
+							publisher.forget("Fizbin", 33333+0);
+							browser.browse();
+							THEN( "correct number of targets is found" ) {
+								REQUIRE( browser.targets.size() == 10);
+							}
+							THEN( "resolved target has correct metadata" ) {
+								for (auto target: browser.targets)
+								{
+									REQUIRE( target.name.find("Fizbin") == 0 );
+								}
+							}
+						}
+					}
 				}
 			}
 		}
