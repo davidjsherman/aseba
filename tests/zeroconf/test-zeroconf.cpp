@@ -19,6 +19,25 @@
 #include "../../common/zeroconf/zeroconf.h"
 #include "../../common/zeroconf/zeroconf-thread.h"
 
+SCENARIO( "Aseba::Zeroconf can advertise local targets" ) {
+	GIVEN( "Spy on ThreadZeroconf" ) {
+		class Spy : public Aseba::ThreadZeroconf
+		{
+			virtual void targetFound(const Aseba::Zeroconf::TargetInformation & target) override
+			{
+				REQUIRE( target.name.find("Fizbin") == 0 );
+				REQUIRE( target.host.find("localhost") == 0 );
+				REQUIRE( target.port == 31415);
+			}
+		} spy;
+		
+		WHEN( "target advertised by name" ) {
+			Aseba::Zeroconf::TxtRecord txt{5, "Foobar", {1}, {8}};
+			spy.advertise("Foobar", 31415, txt);
+		}
+	}
+}
+
 SCENARIO( "Aseba::Zeroconf targets can be advertised and browsed", "[local]" ) {
 	GIVEN( "Zeroconf collection with 10 local targets" ) {
 
@@ -42,11 +61,13 @@ SCENARIO( "Aseba::Zeroconf targets can be advertised and browsed", "[local]" ) {
 				Aseba::Zeroconf::TxtRecord txt{5, "Fizbin", {10,20}, {8,8}};
 				publisher.advertise("Fizbin", 33333+i, txt);
 			}
-//			REQUIRE( publisher.size() == 10 );
 		}
 		
 		WHEN( "targets are browsed" ) {
 			browser.browse();
+			THEN( "correct number of targets is found" ) {
+				REQUIRE( browser.targets.size() == 10);
+			}
 			THEN( "resolved target has correct metadata" ) {
 				for (auto target: browser.targets)
 				{
@@ -58,6 +79,19 @@ SCENARIO( "Aseba::Zeroconf targets can be advertised and browsed", "[local]" ) {
 					{
 						REQUIRE( field.second.length() > 0 );
 					}
+				}
+			}
+		}
+		WHEN( "target is removed" ) {
+			publisher.forget("Fizbin", 33333+0);
+			browser.browse();
+			THEN( "correct number of targets is found" ) {
+				REQUIRE( browser.targets.size() == 10);
+			}
+			THEN( "resolved target has correct metadata" ) {
+				for (auto target: browser.targets)
+				{
+					REQUIRE( target.name.find("Fizbin") == 0 );
 				}
 			}
 		}
