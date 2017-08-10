@@ -34,6 +34,8 @@ namespace Aseba
 		hub(hub)
 	{}
 
+	// TODO: add destructor to delete all remaining references + browseServiceRef
+
 	//! Set up function called after a discovery request has been made. The file
 	//! descriptor associated with zdr.serviceref must be watched, to know when to
 	//! call DNSServiceProcessResult, which in turn calls the callback that was
@@ -46,8 +48,9 @@ namespace Aseba
 		if (socket != -1)
 		{
 			string dashelTarget = FormatableString("tcppoll:sock=%0").arg(socket);
-			if (auto stream = hub.connect(dashelTarget))
-				zeroconfStreams.emplace(stream, serviceRef);
+			auto stream = hub.connect(dashelTarget);
+			assert(stream);
+			zeroconfStreams.emplace(stream, serviceRef);
 		}
 	}
 
@@ -59,16 +62,16 @@ namespace Aseba
 		int socket = DNSServiceRefSockFD(serviceRef);
 		assert (socket != -1);
 
-		auto streamRequestIt(zeroconfStreams.begin());
-		while (streamRequestIt != zeroconfStreams.end())
+		auto streamIt(zeroconfStreams.begin());
+		while (streamIt != zeroconfStreams.end())
 		{
-			if (streamRequestIt->second == serviceRef)
+			if (streamIt->second == serviceRef)
 			{
-				pendingReleaseStreams[streamRequestIt->first] = streamRequestIt->second;
-				streamRequestIt = zeroconfStreams.erase(streamRequestIt);
+				pendingReleaseStreams[streamIt->first] = streamIt->second;
+				streamIt = zeroconfStreams.erase(streamIt);
 			}
 			else
-				++streamRequestIt;
+				++streamIt;
 		}
 	}
 
@@ -90,15 +93,16 @@ namespace Aseba
 		zeroconfStreams.erase(stream);
 	}
 
-	void DashelhubZeroconf::dashelStep(int timeout)
+	bool DashelhubZeroconf::dashelStep(int timeout)
 	{
-		hub.step(timeout);
+		bool ret(hub.step(timeout));
 		for (auto& streamKV: pendingReleaseStreams)
 		{
 			hub.closeStream(streamKV.first);
 			DNSServiceRefDeallocate(streamKV.second);
 		}
 		pendingReleaseStreams.clear();
+		return ret;
 	}
 
 } // namespace Aseba
