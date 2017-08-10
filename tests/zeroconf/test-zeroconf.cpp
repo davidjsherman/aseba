@@ -21,19 +21,25 @@
 
 SCENARIO( "Aseba::Zeroconf can advertise local targets" ) {
 	GIVEN( "Spy on ThreadZeroconf" ) {
+
+		Aseba::ThreadZeroconf publisher;
+
 		class Spy : public Aseba::ThreadZeroconf
 		{
 			virtual void targetFound(const Aseba::Zeroconf::TargetInformation & target) override
 			{
-				REQUIRE( target.name.find("Fizbin") == 0 );
-				REQUIRE( target.host.find("localhost") == 0 );
+				REQUIRE( target.name.find("Foobar") == 0 );
+				REQUIRE( target.domain.find("local.") == 0 );
 				REQUIRE( target.port == 31415);
 			}
 		} spy;
 		
 		WHEN( "target advertised by name" ) {
 			Aseba::Zeroconf::TxtRecord txt{5, "Foobar", {1}, {8}};
-			spy.advertise("Foobar", 31415, txt);
+			publisher.advertise("Foobar", 31415, txt);
+			// no delay seems necessary
+			spy.browse();
+			sleep(4); // allow time for browser to look for Foobar
 		}
 	}
 }
@@ -65,6 +71,7 @@ SCENARIO( "Aseba::Zeroconf targets can be advertised and browsed", "[local]" ) {
 		
 		WHEN( "targets are browsed" ) {
 			browser.browse();
+			sleep(12); // allow time for browser to look for the Fizbins
 			THEN( "correct number of targets is found" ) {
 				REQUIRE( browser.targets.size() == 10);
 			}
@@ -73,7 +80,7 @@ SCENARIO( "Aseba::Zeroconf targets can be advertised and browsed", "[local]" ) {
 				{
 					REQUIRE( target.port >= 33333);
 					REQUIRE( target.name.find("Fizbin") == 0 );
-					REQUIRE( target.host.find("localhost") == 0 );
+					REQUIRE( target.domain.find("local.") == 0 );
 					REQUIRE( target.regtype.find("_aseba._tcp") == 0 );
 					for (auto const& field: target.properties)
 					{
