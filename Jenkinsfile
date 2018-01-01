@@ -9,8 +9,8 @@ pipeline {
 	// Jenkins will prompt for parameters when a branch is build manually
 	// but will use default parameters when the entire project is built.
 	parameters {
-		string(defaultValue: 'David Sherman/dashel/master', description: 'Dashel project', name: 'project_dashel')
-		string(defaultValue: 'David Sherman/enki/master', description: 'Enki project', name: 'project_enki')
+		string(defaultValue: 'aseba-community/dashel/master', description: 'Dashel project', name: 'project_dashel')
+		string(defaultValue: 'enki-community/enki/master', description: 'Enki project', name: 'project_enki')
 	}
 	
 	// Everything will be built in the build/ directory.
@@ -24,14 +24,12 @@ pipeline {
 				// Jenkins will automatically check out the source
 				// Fixme: Stashed source includes .git otherwise submodule update fails
 				sh 'git submodule update --init'
-				stash name: 'source'
 
 				// Dashel and Enki are retrieved from archived artifacts
 				script {
 					def p = ['debian','macos','windows'].collectEntries{
 						[ (it): {
 								node(it) {
-									unstash 'source'
 									copyArtifacts projectName: "${env.project_dashel}",
 										  filter: 'dist/'+it+'/**',
 										  selector: lastSuccessful()
@@ -54,7 +52,7 @@ pipeline {
 						label 'debian'
 					}
 					steps {
-						unstash 'source'
+						sh 'git submodule update --init'
 						unstash 'dist-externals-debian'
 						CMake([label: 'debian'])
 						stash includes: 'dist/**', name: 'dist-aseba-debian'
@@ -66,13 +64,12 @@ pipeline {
 						label 'macos'
 					}
 					steps {
-						unstash 'source'
+						sh 'git submodule update --init'
 						unstash 'dist-externals-macos'
 						script {
 							env.macos_enki_DIR = sh ( script: 'dirname $(find $PWD/dist/macos -name enkiConfig.cmake | head -1)', returnStdout: true).trim()
 						}
 						echo "macos_enki_DIR=${env.macos_enki_DIR}"
-						unstash 'source'
 						CMake([label: 'macos',
 							   envs: [ "enki_DIR=${env.macos_enki_DIR}" ] ])
 						stash includes: 'dist/**', name: 'dist-aseba-macos'
@@ -83,7 +80,7 @@ pipeline {
 						label 'windows'
 					}
 					steps {
-						unstash 'source'
+						sh 'git submodule update --init'
 						unstash 'dist-externals-windows'
 						CMake([label: 'windows'])
 						stash includes: 'dist/**', name: 'dist-aseba-windows'
@@ -103,8 +100,9 @@ pipeline {
 					steps {
 						unstash 'build-aseba-debian'
 						dir('build/debian') {
-							sh "LANG=en_US.UTF-8 ctest -E 'e2e.*|simulate.*|.*http.*|valgrind.*'"
+							sh "LANG=en_US.UTF-8 ctest -T Test -E 'e2e.*|simulate.*|.*http.*|valgrind.*'"
 						}
+						stash includes: 'build/debian/Testing/**', name: 'test-results', allowEmpty: true
 					}
 				}
 			}
@@ -124,8 +122,9 @@ pipeline {
 					steps {
 						unstash 'build-aseba-debian'
 						dir('build/debian') {
-							sh "LANG=en_US.UTF-8 ctest -R 'e2e.*|simulate.*|.*http.*|valgrind.*'"
+							sh "LANG=en_US.UTF-8 ctest -T Test -R 'e2e.*|simulate.*|.*http.*|valgrind.*'"
 						}
+						stash includes: 'build/debian/Testing/**', name: 'test-results', allowEmpty: true
 					}
 				}
 			}
@@ -138,6 +137,12 @@ pipeline {
 				unstash 'dist-aseba-windows'
 				archiveArtifacts artifacts: 'dist/**', fingerprint: true, onlyIfSuccessful: true
 			}
+		}
+	}
+	post {
+		always {
+			unstash 'test-results'
+			step([$class: 'XUnitPublisher', testTimeMargin: '3000', thresholdMode: 1, thresholds: [[$class: 'FailedThreshold', failureNewThreshold: '', failureThreshold: '', unstableNewThreshold: '', unstableThreshold: '5'], [$class: 'SkippedThreshold', failureNewThreshold: '', failureThreshold: '', unstableNewThreshold: '', unstableThreshold: '']], tools: [[$class: 'CTestType', deleteOutputFiles: true, failIfNotNew: false, pattern: 'build/debian/Testing/*/Test.xml', skipNoTestFiles: false, stopProcessingIfError: true]]])
 		}
 	}
 }
