@@ -1,0 +1,7 @@
+<!DOCTYPE aseba-playground>
+<!-- Running `asebacmd -t tcp:port=33301 presence listnodes` -->
+<!-- will crash this playground in SimpleDashelConnection::closeOldStreams (DashelAsebaGlue.cpp L#158) -->
+<aseba-playground>
+	<world w="40" h="40" />
+	<robot type="thymio2" port="33301" x="20" y="20" nodeId="1" name="Test Solo" />
+</aseba-playground>
