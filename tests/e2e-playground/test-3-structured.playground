@@ -1,0 +1,20 @@
+<!DOCTYPE aseba-playground>
+<!-- Aseba playground for testing processes with argument lists -->
+<!-- 1. An argument can included spaces (in this test, the Zeroconf name of the switch) -->
+<!-- 2. An argument can be any literal text (in this test, the Dashel target) -->
+<!-- The test succeeds if the node at tcp:port=33303 emits an alive event every 3 seconds -->
+
+<aseba-playground>
+	<world w="60" h="80" />
+
+	<robot type="thymio2" port="33302" x="40" y="20" nodeId="1" name="Test Solo Structured" />
+	<process>
+		<arg>:asebaswitch</arg>
+		<arg>-p</arg>
+		<arg>33303</arg>
+		<arg>-n</arg>
+		<arg>Network Solo Structured</arg>
+		<arg><![CDATA[tcp:localhost;33302]]></arg>
+	</process>
+	<process command=":asebamassloader --once beacon-solo.aesl tcp:localhost;33303" />
+</aseba-playground>

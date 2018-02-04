@@ -18,3 +18,9 @@ The Playground files provide two ways of building the same networks.
 * *test-2-networks.playground* declares the networks using a proposed extension of the Playground XML definition.
 
 The latter is meant to fail at the present time, because the proposed extension is not yet implemented.
+
+## Processes with explicit argument lists
+
+The testing scenario comprises a single Thymio-II robot connected to a switch, running the beacon program. The playground declares the process to run using a proposed extension of the Playground XML definition, that places each argument in a separate `<arg>` tag. With this syntax arguments may contain spaces, or even contain arbitrary CDATA.
+
+The test succeeds if the node at tcp:port=33303 emits an alive event every 3 seconds. It is meant to fail at the present time, because the proposed extension is not yet implemented.
