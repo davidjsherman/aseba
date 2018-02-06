@@ -11,16 +11,16 @@
 		Stephane Magnenat <stephane at magnenat dot net>
 		(http://stephane.magnenat.net)
 		and other contributors, see authors.txt for details
-	
+
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Lesser General Public License as published
 	by the Free Software Foundation, version 3 of the License.
-	
+
 	This program is distributed in the hope that it will be useful,
 	but WITHOUT ANY WARRANTY; without even the implied warranty of
 	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 	GNU Lesser General Public License for more details.
-	
+
 	You should have received a copy of the GNU Lesser General Public License
 	along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
@@ -42,38 +42,42 @@ namespace Enki
 	class ChallengeViewer : public ViewerWidget
 	{
 		Q_OBJECT
-		
+
 	protected:
 		bool savingVideo;
 		int ePuckCount;
 
 		bool autoCamera;
-		
+
 		QFont titleFont;
 		QFont entryFont;
 		QFont labelFont;
-		
+
 	public:
 		ChallengeViewer(World* world, int ePuckCount);
-	
+
 	public slots:
 		void addNewRobot();
 		void removeRobot();
 		void autoCameraStateChanged(bool state);
-	
+
 	protected:
-		virtual void timerEvent(QTimerEvent * event);
-		//virtual void mouseMoveEvent ( QMouseEvent * event );
-		virtual void keyPressEvent ( QKeyEvent * event );
-		virtual void keyReleaseEvent ( QKeyEvent * event );
-		
+		void timerEvent(QTimerEvent * event) override;
+		void keyPressEvent ( QKeyEvent * event ) override;
+		void keyReleaseEvent ( QKeyEvent * event ) override;
+
 		void drawQuad2D(double x, double y, double w, double ar);
-		
-		virtual void initializeGL();
-		
-		virtual void renderObjectsTypesHook();
-		virtual void displayObjectHook(PhysicalObject *object);
-		virtual void sceneCompletedHook();
+
+		void initializeGL() override;
+
+		void displayWidgets() override;
+		void clickWidget(QMouseEvent *event) override;
+
+		void renderObjectsTypesHook() override;
+		void displayObjectHook(PhysicalObject *object) override;
+		void sceneCompletedHook() override;
+
+		void helpActivated();
 	};
 
 	class ChallengeApplication : public QWidget
@@ -87,7 +91,7 @@ namespace Enki
 
 	public:
 		ChallengeApplication(World* world, int ePuckCount);
-		
+
 	public slots:
 		void fullScreenStateChanged(bool fullScreen);
 
@@ -105,7 +109,7 @@ class LanguageSelectionDialog : public QDialog
 
 public:
 	QComboBox* languageSelectionBox;
-	
+
 	LanguageSelectionDialog();
 };
 

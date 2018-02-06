@@ -4,16 +4,16 @@
 		Stephane Magnenat <stephane at magnenat dot net>
 		(http://stephane.magnenat.net)
 		and other contributors, see authors.txt for details
-	
+
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Lesser General Public License as published
 	by the Free Software Foundation, version 3 of the License.
-	
+
 	This program is distributed in the hope that it will be useful,
 	but WITHOUT ANY WARRANTY; without even the implied warranty of
 	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 	GNU Lesser General Public License for more details.
-	
+
 	You should have received a copy of the GNU Lesser General Public License
 	along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
@@ -34,6 +34,9 @@ extern "C" AsebaNativeFunctionDescription PlaygroundThymio2NativeDescription_sou
 
 extern "C" void PlaygroundThymio2Native_sound_replay(AsebaVMState *vm);
 extern "C" AsebaNativeFunctionDescription PlaygroundThymio2NativeDescription_sound_replay;
+
+extern "C" void PlaygroundThymio2Native_sound_duration(AsebaVMState *vm);
+extern "C" AsebaNativeFunctionDescription PlaygroundThymio2NativeDescription_sound_duration;
 
 extern "C" void PlaygroundThymio2Native_sound_system(AsebaVMState *vm);
 extern "C" AsebaNativeFunctionDescription PlaygroundThymio2NativeDescription_sound_system;
@@ -118,8 +121,9 @@ extern "C" AsebaNativeFunctionDescription PlaygroundThymio2NativeDescription_sd_
 	&PlaygroundThymio2NativeDescription_sd_open, \
 	&PlaygroundThymio2NativeDescription_sd_write, \
 	&PlaygroundThymio2NativeDescription_sd_read, \
-	&PlaygroundThymio2NativeDescription_sd_seek
-	
+	&PlaygroundThymio2NativeDescription_sd_seek, \
+	&PlaygroundThymio2NativeDescription_sound_duration
+
 #define PLAYGROUND_THYMIO2_NATIVES_FUNCTIONS \
 	PlaygroundThymio2Native_sound_record, \
 	PlaygroundThymio2Native_sound_play, \
@@ -141,6 +145,7 @@ extern "C" AsebaNativeFunctionDescription PlaygroundThymio2NativeDescription_sd_
 	PlaygroundThymio2Native_sd_open, \
 	PlaygroundThymio2Native_sd_write, \
 	PlaygroundThymio2Native_sd_read, \
-	PlaygroundThymio2Native_sd_seek
+	PlaygroundThymio2Native_sd_seek, \
+	PlaygroundThymio2Native_sound_duration
 
 #endif // __PLAYGROUND_THYMIO2_NATIVES_H

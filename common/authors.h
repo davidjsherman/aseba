@@ -9,7 +9,7 @@ namespace Aseba
 	struct AuthorInfo
 	{
 		using Tags = std::set<std::string>;
-		
+
 		std::string name;
 		std::string email;
 		std::string web;
@@ -17,7 +17,7 @@ namespace Aseba
 		Tags tags;
 	};
 	using AuthorInfos = std::vector<AuthorInfo>;
-	
+
 	struct InstitutionInfo
 	{
 		std::string name;
@@ -76,7 +76,7 @@ namespace Aseba
 			{ u8"blockly", }
 		},
 	};
-	
+
 	static const AuthorInfos thankToList = {
 		{
 			u8"Maria María Beltrán",
@@ -114,9 +114,9 @@ namespace Aseba
 			{ u8"vpl", }
 		},
 		{
-			u8"Yves Piguet ",
-			u8"",
-			u8"",
+			u8"Yves Piguet",
+			u8"yves dot piguet at epfl dot ch",
+			u8"https://www.calerga.com/people/piguet.html",
 			u8"bug reporting and fixing",
 			{ u8"core", u8"studio", }
 		},
@@ -151,7 +151,7 @@ namespace Aseba
 		{
 			u8"Francesco Mondada",
 			u8"francesco dot mondada at epfl dot ch",
-			u8"",
+			u8"https://people.epfl.ch/francesco.mondada",
 			u8"bug reporting and dissemination",
 			{ u8"studio", u8"vpl", u8"blockly", }
 		},
@@ -202,6 +202,13 @@ namespace Aseba
 			u8"shilingwang0621 at gmail dot com",
 			u8"",
 			u8"Chinese translation",
+			{ u8"translation", }
+		},
+		{
+			u8"Mamoru Oichi",
+			u8"moichi at exseed-inc dot jp",
+			u8"",
+			u8"Japanese translation",
 			{ u8"translation", }
 		},
 		{

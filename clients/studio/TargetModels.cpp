@@ -4,62 +4,62 @@
 		Stephane Magnenat <stephane at magnenat dot net>
 		(http://stephane.magnenat.net)
 		and other contributors, see authors.txt for details
-	
+
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Lesser General Public License as published
 	by the Free Software Foundation, version 3 of the License.
-	
+
 	This program is distributed in the hope that it will be useful,
 	but WITHOUT ANY WARRANTY; without even the implied warranty of
 	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 	GNU Lesser General Public License for more details.
-	
+
 	You should have received a copy of the GNU Lesser General Public License
 	along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "TargetModels.h"
 #include <QtDebug>
-#include <QtGui>
+#include <QtWidgets>
 
 namespace Aseba
 {
 	/** \addtogroup studio */
 	/*@{*/
-	
+
 	VariableListener::VariableListener(TargetVariablesModel* variablesModel) :
 		variablesModel(variablesModel)
 	{
-		
+
 	}
-	
+
 	VariableListener::~VariableListener()
 	{
 		if (variablesModel)
 			variablesModel->unsubscribeViewPlugin(this);
 	}
-	
+
 	bool VariableListener::subscribeToVariableOfInterest(const QString& name)
 	{
 		return variablesModel->subscribeToVariableOfInterest(this, name);
 	}
-	
+
 	void VariableListener::unsubscribeToVariableOfInterest(const QString& name)
 	{
 		variablesModel->unsubscribeToVariableOfInterest(this, name);
 	}
-	
+
 	void VariableListener::unsubscribeToVariablesOfInterest()
 	{
 		variablesModel->unsubscribeToVariablesOfInterest(this);
 	}
-	
+
 	void VariableListener::invalidateVariableModel()
 	{
 		variablesModel = 0;
 	}
-	
-	
+
+
 	TargetVariablesModel::~TargetVariablesModel()
 	{
 		for (VariableListenersNameMap::iterator it = variableListenersMap.begin(); it != variableListenersMap.end(); ++it)
@@ -67,7 +67,17 @@ namespace Aseba
 			it.key()->invalidateVariableModel();
 		}
 	}
-	
+
+	TargetVariablesModel::TargetVariablesModel(QObject *parent) :
+		QAbstractItemModel(parent)
+	{
+	}
+
+	Qt::DropActions TargetVariablesModel::supportedDropActions() const
+	{
+		return Qt::CopyAction;
+	}
+
 	int TargetVariablesModel::rowCount(const QModelIndex &parent) const
 	{
 		if (parent.isValid())
@@ -80,18 +90,12 @@ namespace Aseba
 		else
 			return variables.size();
 	}
-	
-	TargetVariablesModel::TargetVariablesModel(QObject *parent) :
-		QAbstractItemModel(parent)
-	{
-		setSupportedDragActions(Qt::CopyAction);
-	}
-	
+
 	int TargetVariablesModel::columnCount(const QModelIndex & parent) const
 	{
 		return 2;
 	}
-	
+
 	QModelIndex TargetVariablesModel::index(int row, int column, const QModelIndex &parent) const
 	{
 		if (parent.isValid())
@@ -105,7 +109,7 @@ namespace Aseba
 				return createIndex(row, column, -1);
 		}
 	}
-	
+
 	QModelIndex TargetVariablesModel::parent(const QModelIndex &index) const
 	{
 		if (index.isValid() && (index.internalId() != -1))
@@ -113,14 +117,14 @@ namespace Aseba
 		else
 			return QModelIndex();
 	}
-	
+
 	QVariant TargetVariablesModel::data(const QModelIndex &index, int role) const
 	{
 		if (index.parent().isValid())
 		{
 			if (role != Qt::DisplayRole)
 				return QVariant();
-			
+
 			if (index.column() == 0)
 				return index.row();
 			else
@@ -168,7 +172,7 @@ namespace Aseba
 			}
 		}
 	}
-	
+
 	QVariant TargetVariablesModel::headerData(int section, Qt::Orientation orientation, int role) const
 	{
 		//Q_UNUSED(section)
@@ -183,12 +187,12 @@ namespace Aseba
 		}
 		return QVariant();
 	}
-	
+
 	Qt::ItemFlags TargetVariablesModel::flags(const QModelIndex &index) const
 	{
 		if (!index.isValid())
 			return 0;
-		
+
 		if (index.column() == 1)
 		{
 			if (index.parent().isValid())
@@ -206,7 +210,7 @@ namespace Aseba
 				return Qt::ItemIsEnabled | Qt::ItemIsDragEnabled | Qt::ItemIsSelectable;
 		}
 	}
-	
+
 	bool TargetVariablesModel::setData(const QModelIndex &index, const QVariant &value, int role)
 	{
 		if (index.isValid() && role == Qt::EditRole)
@@ -217,10 +221,10 @@ namespace Aseba
 				bool ok;
 				variableValue = value.toInt(&ok);
 				Q_ASSERT(ok);
-				
+
 				variables[index.parent().row()].value[index.row()] = variableValue;
 				emit variableValuesChanged(variables[index.parent().row()].pos + index.row(), VariablesDataVector(1, variableValue));
-				
+
 				return true;
 			}
 			else if (variables.at(index.row()).value.size() == 1)
@@ -229,23 +233,23 @@ namespace Aseba
 				bool ok;
 				variableValue = value.toInt(&ok);
 				Q_ASSERT(ok);
-				
+
 				variables[index.row()].value[0] = variableValue;
 				emit variableValuesChanged(variables[index.row()].pos, VariablesDataVector(1, variableValue));
-				
+
 				return true;
 			}
 		}
 		return false;
 	}
-	
+
 	QStringList TargetVariablesModel::mimeTypes () const
 	{
 		QStringList types;
 		types << "text/plain";
 		return types;
 	}
-	
+
 	QMimeData * TargetVariablesModel::mimeData ( const QModelIndexList & indexes ) const
 	{
 		QString texts;
@@ -263,12 +267,12 @@ namespace Aseba
 					texts += text;
 			}
 		}
-		
+
 		QMimeData *mimeData = new QMimeData();
 		mimeData->setText(texts);
 		return mimeData;
 	}
-	
+
 	unsigned TargetVariablesModel::getVariablePos(const QString& name) const
 	{
 		for (int i = 0; i < variables.size(); ++i)
@@ -279,7 +283,7 @@ namespace Aseba
 		}
 		return 0;
 	}
-	
+
 	unsigned TargetVariablesModel::getVariableSize(const QString& name) const
 	{
 		for (int i = 0; i < variables.size(); ++i)
@@ -290,7 +294,7 @@ namespace Aseba
 		}
 		return 0;
 	}
-	
+
 	VariablesDataVector TargetVariablesModel::getVariableValue(const QString& name) const
 	{
 		for (int i = 0; i < variables.size(); ++i)
@@ -301,7 +305,7 @@ namespace Aseba
 		}
 		return VariablesDataVector();
 	}
-	
+
 	void TargetVariablesModel::updateVariablesStructure(const VariablesMap *variablesMap)
 	{
 		// Build a new list of variables
@@ -313,7 +317,7 @@ namespace Aseba
 			var.name = QString::fromStdWString(it->first);
 			var.pos = it->second.first;
 			var.value.resize(it->second.second);
-			
+
 			// find its right place in the array
 			int i;
 			for (i = 0; i < newVariables.size(); ++i)
@@ -323,7 +327,7 @@ namespace Aseba
 			}
 			newVariables.insert(i, var);
 		}
-		
+
 		// compute the difference
 		int i(0);
 		int count(std::min(variables.length(), newVariables.length()));
@@ -334,7 +338,7 @@ namespace Aseba
 			variables[i].value.size() == newVariables[i].value.size()
 		)
 			++i;
-		
+
 		// update starting from the first change point
 		//qDebug() << "change from " << i << " to " << variables.length();
 		if (i != variables.length())
@@ -345,9 +349,9 @@ namespace Aseba
 				variables.removeLast();
 			endRemoveRows();
 		}
-		
+
 		//qDebug() << "size: " << variables.length();
-		
+
 		if (i != newVariables.length())
 		{
 			beginInsertRows(QModelIndex(), i, newVariables.length()-1);
@@ -364,7 +368,7 @@ namespace Aseba
 			var.name = QString::fromStdWString(it->first);
 			var.pos = it->second.first;
 			var.value.resize(it->second.second);
-			
+
 			// find its right place in the array
 			int i;
 			for (i = 0; i < variables.size(); ++i)
@@ -374,10 +378,10 @@ namespace Aseba
 			}
 			variables.insert(i, var);
 		}
-		
+
 		reset();*/
 	}
-	
+
 	void TargetVariablesModel::setVariablesData(unsigned start, const VariablesDataVector &data)
 	{
 		size_t dataLength = data.size();
@@ -406,14 +410,14 @@ namespace Aseba
 			// if nothing to copy, continue
 			if (copyLen <= 0)
 				continue;
-			
+
 			// copy
 			copy(data.begin() + copyStart, data.begin() + copyStart + copyLen, var.value.begin() + varStart);
-			
+
 			// notify gui
 			QModelIndex parentIndex = index(i, 0);
 			emit dataChanged(index(varStart, 0, parentIndex), index(varStart + copyLen, 0, parentIndex));
-			
+
 			// and notify view plugins
 			for (VariableListenersNameMap::iterator it = variableListenersMap.begin(); it != variableListenersMap.end(); ++it)
 			{
@@ -426,7 +430,7 @@ namespace Aseba
 			}
 		}
 	}
-	
+
 	bool TargetVariablesModel::setVariableValues(const QString& name, const VariablesDataVector& values)
 	{
 		for (int i = 0; i < variables.size(); ++i)
@@ -441,12 +445,12 @@ namespace Aseba
 		}
 		return false;
 	}
-	
+
 	void TargetVariablesModel::unsubscribeViewPlugin(VariableListener* listener)
 	{
 		variableListenersMap.remove(listener);
 	}
-	
+
 	bool TargetVariablesModel::subscribeToVariableOfInterest(VariableListener* listener, const QString& name)
 	{
 		QStringList &list = variableListenersMap[listener];
@@ -456,19 +460,19 @@ namespace Aseba
 				return true;
 		return false;
 	}
-	
+
 	void TargetVariablesModel::unsubscribeToVariableOfInterest(VariableListener* listener, const QString& name)
 	{
 		QStringList &list = variableListenersMap[listener];
 		list.removeAll(name);
 	}
-	
+
 	void TargetVariablesModel::unsubscribeToVariablesOfInterest(VariableListener* plugin)
 	{
 		if (variableListenersMap.contains(plugin))
 			variableListenersMap.remove(plugin);
 	}
-	
+
 	struct TargetFunctionsModel::TreeItem
 	{
 		TreeItem* parent;
@@ -477,21 +481,21 @@ namespace Aseba
 		QString toolTip;
 		bool enabled;
 		bool draggable;
-		
+
 		TreeItem() :
 			parent(0),
 			name("root"),
 			enabled(true),
 			draggable(false)
 		{ }
-		
+
 		TreeItem(TreeItem* parent, const QString& name, bool enabled, bool draggable) :
 			parent(parent),
 			name(name),
 			enabled(enabled),
 			draggable(draggable)
 		{ }
-		
+
 		TreeItem(TreeItem* parent, const QString& name, const QString& toolTip, bool enabled, bool draggable) :
 			parent(parent),
 			name(name),
@@ -499,26 +503,26 @@ namespace Aseba
 			enabled(enabled),
 			draggable(draggable)
 		{ }
-		
+
 		~TreeItem()
 		{
 			for (int i = 0; i < children.size(); i++)
 				delete children[i];
 		}
-		
+
 		TreeItem *getEntry(const QString& name, bool enabled = true)
 		{
 			for (int i = 0; i < children.size(); i++)
 				if (children[i]->name == name)
 					return children[i];
-			
+
 			children.push_back(new TreeItem(this, name, enabled, draggable));
 			return children.last();
 		}
 	};
-	
-	
-	
+
+
+
 	TargetFunctionsModel::TargetFunctionsModel(const TargetDescription *descriptionRead, bool showHidden, QObject *parent) :
 		QAbstractItemModel(parent),
 		root(0),
@@ -526,15 +530,19 @@ namespace Aseba
 		regExp("\\b")
 	{
 		Q_ASSERT(descriptionRead);
-		setSupportedDragActions(Qt::CopyAction);
 		recreateTreeFromDescription(showHidden);
 	}
-	
+
 	TargetFunctionsModel::~TargetFunctionsModel()
 	{
 		delete root;
 	}
-	
+
+	Qt::DropActions TargetFunctionsModel::supportedDropActions() const
+	{
+		return Qt::CopyAction;
+	}
+
 	TargetFunctionsModel::TreeItem *TargetFunctionsModel::getItem(const QModelIndex &index) const
 	{
 		if (index.isValid())
@@ -545,13 +553,13 @@ namespace Aseba
 		}
 		return root;
 	}
-	
+
 	QString TargetFunctionsModel::getToolTip(const TargetDescription::NativeFunction& function) const
 	{
 		// tooltip, display detailed information with pretty print of template parameters
 		QString text;
 		QSet<QString> variablesNames;
-		
+
 		text += QString("<b>%1</b>(").arg(QString::fromStdWString(function.name));
 		for (size_t i = 0; i < function.parameters.size(); i++)
 		{
@@ -564,32 +572,32 @@ namespace Aseba
 			{
 				text += QString("[&lt;T%1&gt;]").arg(-function.parameters[i].size);
 			}
-			
+
 			if (i + 1 < function.parameters.size())
 				text += QString(", ");
 		}
-		
+
 		QString description = QString::fromStdWString(function.description);
 		QStringList descriptionWords = description.split(regExp);
 		for (int i = 0; i < descriptionWords.size(); ++i)
 			if (variablesNames.contains(descriptionWords.at(i)))
 				descriptionWords[i] = QString("<tt>%1</tt>").arg(descriptionWords[i]);
-		
+
 		text += QString(")<br/>") + descriptionWords.join(" ");
-		
+
 		return text;
 	}
-	
+
 	int TargetFunctionsModel::rowCount(const QModelIndex & parent) const
 	{
 		return getItem(parent)->children.count();
 	}
-	
+
 	int TargetFunctionsModel::columnCount(const QModelIndex & /* parent */) const
 	{
 		return 1;
 	}
-	
+
 	void TargetFunctionsModel::recreateTreeFromDescription(bool showHidden)
 	{
 		beginResetModel();
@@ -597,20 +605,20 @@ namespace Aseba
 		if (root)
 			delete root;
 		root = new TreeItem;
-		
+
 		if (showHidden)
 			root->getEntry(tr("hidden"), false);
-		
+
 		for (size_t i = 0; i < descriptionRead->nativeFunctions.size(); i++)
 		{
 			// get the name, split it, and managed hidden
 			QString name = QString::fromStdWString(descriptionRead->nativeFunctions[i].name);
 			QStringList splittedName = name.split(".", QString::SkipEmptyParts);
-			
+
 			// ignore functions with no name at all
 			if (splittedName.isEmpty())
 				continue;
-			
+
 			// get first, check whether hidden, and then iterate
 			TreeItem* entry = root;
 			Q_ASSERT(!splittedName[0].isEmpty());
@@ -620,52 +628,52 @@ namespace Aseba
 					continue;
 				entry = entry->getEntry(tr("hidden"), false);
 			}
-			
+
 			for (int j = 0; j < splittedName.size() - 1; ++j)
 				entry = entry->getEntry(splittedName[j], entry->enabled);
-			
+
 			// for last entry
 			entry->children.push_back(new TreeItem(entry, name, getToolTip(descriptionRead->nativeFunctions[i]), entry->enabled, true));
 		}
-		
+
 		endResetModel();
 	}
-	
+
 	QModelIndex TargetFunctionsModel::parent(const QModelIndex &index) const
 	{
 		if (!index.isValid())
 			return QModelIndex();
-	
+
 		TreeItem *childItem = getItem(index);
 		TreeItem *parentItem = childItem->parent;
-	
+
 		if (parentItem == root)
 			return QModelIndex();
-		
+
 		if (parentItem->parent)
 			return createIndex(parentItem->parent->children.indexOf(const_cast<TreeItem*>(parentItem)), 0, parentItem);
 		else
 			return createIndex(0, 0, parentItem);
 	}
-	
+
 	QModelIndex TargetFunctionsModel::index(int row, int column, const QModelIndex &parent) const
 	{
 		TreeItem *parentItem = getItem(parent);
 		TreeItem *childItem = parentItem->children.value(row);
 		Q_ASSERT(childItem);
-		
+
 		if (childItem)
 			return createIndex(row, column, childItem);
 		else
 			return QModelIndex();
 	}
-	
+
 	QVariant TargetFunctionsModel::data(const QModelIndex &index, int role) const
 	{
 		if (!index.isValid() ||
 			(role != Qt::DisplayRole && role != Qt::ToolTipRole && role != Qt::WhatsThisRole))
 			return QVariant();
-		
+
 		if (role == Qt::DisplayRole)
 		{
 			return getItem(index)->name;
@@ -675,7 +683,7 @@ namespace Aseba
 			return getItem(index)->toolTip;
 		}
 	}
-	
+
 	QVariant TargetFunctionsModel::headerData(int section, Qt::Orientation orientation, int role) const
 	{
 		Q_UNUSED(section)
@@ -683,7 +691,7 @@ namespace Aseba
 		Q_UNUSED(role)
 		return QVariant();
 	}
-	
+
 	Qt::ItemFlags TargetFunctionsModel::flags(const QModelIndex & index) const
 	{
 		TreeItem *item = static_cast<TreeItem*>(index.internalPointer());
@@ -697,14 +705,14 @@ namespace Aseba
 		else
 			return Qt::ItemIsEnabled;
 	}
-	
+
 	QStringList TargetFunctionsModel::mimeTypes () const
 	{
 		QStringList types;
 		types << "text/plain";
 		return types;
 	}
-	
+
 	QMimeData * TargetFunctionsModel::mimeData ( const QModelIndexList & indexes ) const
 	{
 		QString texts;
@@ -716,18 +724,18 @@ namespace Aseba
 				texts += text;
 			}
 		}
-		
+
 		QMimeData *mimeData = new QMimeData();
 		mimeData->setText(texts);
 		return mimeData;
 	}
-	
-	
-	
+
+
+
 	TargetSubroutinesModel::TargetSubroutinesModel(QObject * parent):
 		QStringListModel(parent)
 	{}
-	
+
 	void TargetSubroutinesModel::updateSubroutineTable(const Compiler::SubroutineTable& subroutineTable)
 	{
 		QStringList subroutineNames;
@@ -735,6 +743,6 @@ namespace Aseba
 			subroutineNames.push_back(QString::fromStdWString(it->name));
 		setStringList(subroutineNames);
 	}
-	
+
 	/*@}*/
 } // namespace Aseba

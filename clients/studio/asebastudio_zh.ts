@@ -103,37 +103,37 @@
     <message>
         <location filename="DashelTarget.cpp" line="+87"/>
         <source>Discovered targets</source>
-        <translation type="unfinished"></translation>
+        <translation>已发现的目标</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Selected target</source>
-        <translation type="unfinished"></translation>
+        <translation>选定的目标</translation>
     </message>
     <message>
         <location line="+8"/>
         <source>Serial port</source>
-        <translation type="unfinished"></translation>
+        <translation>串行端口</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Local TCP</source>
-        <translation type="unfinished"></translation>
+        <translation>本地TCP</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>TCP</source>
-        <translation type="unfinished"></translation>
+        <translation>TCP</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Documentation</source>
-        <translation type="unfinished"></translation>
+        <translation>文档</translation>
     </message>
     <message>
         <location line="+25"/>
         <source>Language</source>
-        <translation type="unfinished"></translation>
+        <translation>语言</translation>
     </message>
     <message>
         <location line="+5"/>
@@ -153,27 +153,27 @@
     <message>
         <location line="+50"/>
         <source> – type %1</source>
-        <translation type="unfinished"></translation>
+        <translation> – 机器人%1</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>local on computer</source>
-        <translation type="unfinished"></translation>
+        <translation>本地电脑</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>distant on network</source>
-        <translation type="unfinished"></translation>
+        <translation>远程网络</translation>
     </message>
     <message>
         <location line="+63"/>
         <source> – device %1</source>
-        <translation type="unfinished"></translation>
+        <translation> – 连接设备%1</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>serial port or USB</source>
-        <translation type="unfinished"></translation>
+        <translation>串行端口或USB</translation>
     </message>
 </context>
 <context>
@@ -525,12 +525,12 @@ Occurrences</source>
     <message>
         <location line="-1684"/>
         <source>Aseba Studio is an environment for interactively programming robots with a text language.</source>
-        <translation type="unfinished"></translation>
+        <translation>Aseba Studio是应用文字编程语言对机器人进行编程的编程环境</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>https://www.thymio.org/en:asebastudio</source>
-        <translation type="unfinished"></translation>
+        <translation>https://www.thymio.org/zh:asebastudio</translation>
     </message>
     <message>
         <location line="+72"/>
@@ -1364,7 +1364,7 @@ event %0 : </source>
 <context>
     <name>Aseba::ThymioBlockly::ThymioBlockly</name>
     <message>
-        <location filename="plugins/ThymioBlockly/ThymioBlockly.cpp" line="+71"/>
+        <location filename="plugins/ThymioBlockly/ThymioBlockly.cpp" line="+72"/>
         <source>Thymio Blockly Interface</source>
         <translation>Thymio模块化界面</translation>
     </message>
@@ -1409,12 +1409,18 @@ event %0 : </source>
         <translation>截屏</translation>
     </message>
     <message>
-        <location line="+58"/>
+        <location line="+61"/>
+        <source>Blockly for Thymio robot allows to program by visually assembling elements.
+Blockly is a &lt;a href=&quot;https://developers.google.com/blockly/&quot;&gt;third-party software from Google&lt;/a&gt;.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
         <source>http://aseba.wikidot.com/en:blocklyprogramming</source>
         <translation>http://aseba.wikidot.com/en:blocklyprogramming</translation>
     </message>
     <message>
-        <location line="+15"/>
+        <location line="+22"/>
         <source>Export program as image</source>
         <translation>将程序输出为图像</translation>
     </message>
@@ -1606,12 +1612,12 @@ event %0 : </source>
     <message>
         <location line="+41"/>
         <source>The Visual Programming Language (VPL) for the Thymio robot allows to program by associating event and actions blocks.</source>
-        <translation type="unfinished"></translation>
+        <translation>使用Thymio可视化程序设计语言(VPL)可以通过关联事件和机器人行为进行编程</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>https://www.thymio.org/en:thymiovpl</source>
-        <translation type="unfinished"></translation>
+        <translation>https://www.thymio.org/zh:thymiovpl</translation>
     </message>
     <message>
         <source>http://aseba.wikidot.com/en:thymiovpl</source>
