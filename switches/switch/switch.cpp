@@ -260,6 +260,7 @@ void dumpHelp(std::ostream &stream, const char *programName)
 	stream << "-p port         : listens to incoming connection on this port\n";
 	stream << "-n, --name name : use this name if advertising\n";
 	stream << "--rawtime       : shows time in the form of sec:usec since 1970\n";
+	stream << "--watchTargets  : watch targets and reconnect them if necessary\n";
 	stream << "-h, --help      : shows this help\n";
 	stream << "-V, --version   : shows the version number\n";
 	stream << "Additional targets are any valid Dashel targets." << std::endl;
