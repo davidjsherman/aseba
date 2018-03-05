@@ -56,7 +56,7 @@ namespace Aseba
 	/*@{*/
 
 	//! Broadcast messages form any data stream to all others data streams including itself.
-	Switch::Switch(unsigned port, std::string name, bool verbose, bool dump, bool forward, bool rawTime) :
+	Switch::Switch(unsigned port, std::string name, bool verbose, bool dump, bool forward, bool rawTime, bool watchTargets) :
 		#ifdef DASHEL_VERSION_INT
 		Dashel::Hub(verbose || dump),
 		#endif // DASHEL_VERSION_INT
@@ -67,7 +67,8 @@ namespace Aseba
 		verbose(verbose),
 		dump(dump),
 		forward(forward),
-		rawTime(rawTime)
+		rawTime(rawTime),
+		watchTargets(watchTargets)
 	{
 		ostringstream oss;
 		oss << "tcpin:port=" << port;
@@ -177,6 +178,8 @@ namespace Aseba
 		}
 #endif // ZEROCONF_SUPPORT
 
+		targetsNeedingReconnect[stream->getTargetName()] = true;
+
 		if (verbose)
 		{
 			dumpTime(cout, rawTime);
@@ -204,6 +207,44 @@ namespace Aseba
 		idRemapTable[stream] = IdPair(localId, targetId);
 	}
 	
+	void Switch::watchTarget(std::string target)
+	{
+		targetsNeedingReconnect[target] = false;
+	}
+
+	void Switch::checkWatchedTargets()
+	{
+		for(auto& tKV: targetsNeedingReconnect)
+		{
+			if (! tKV.second)
+			{
+				continue;
+			}
+
+			auto target = tKV.first;
+			try
+			{
+				lock();
+				auto stream = connect(target);
+				targetsNeedingReconnect[target] = (stream == 0);
+				unlock();
+			}
+			catch (DashelException e)
+			{
+				unlock();
+			}
+
+			try
+			{
+				// we have to stop hub because otherwise it will be forever in poll()
+				Dashel::Hub::stop();
+			}
+			catch (DashelException e)
+			{
+			}
+		}
+	}
+
 	/*@}*/
 };
 
@@ -242,6 +283,7 @@ int main(int argc, char *argv[])
 	bool dump = false;
 	bool forward = true;
 	bool rawTime = false;
+	bool watchTargets = false;
 	std::vector<std::string> additionalTargets;
 	
 	int argCounter = 1;
@@ -297,6 +339,10 @@ int main(int argc, char *argv[])
 			dumpVersion(std::cout);
 			return 0;
 		}
+		else if (strcmp(arg, "--watchTargets") == 0)
+		{
+			watchTargets = true;
+		}
 		else
 		{
 			additionalTargets.push_back(argv[argCounter]);
@@ -306,11 +352,12 @@ int main(int argc, char *argv[])
 	
 	try
 	{
-		Aseba::Switch aswitch(port, name, verbose, dump, forward, rawTime);
+		Aseba::Switch aswitch(port, name, verbose, dump, forward, rawTime, watchTargets);
 		for (size_t i = 0; i < additionalTargets.size(); i++)
 		{
 			const std::string& target(additionalTargets[i]);
 			Dashel::Stream* stream = aswitch.connect(target);
+			aswitch.watchTarget(stream->getTargetName());
 			
 			// see whether we have to remap the id of this stream
 			Dashel::ParameterSet remapIdDecoder;
@@ -333,10 +380,11 @@ int main(int argc, char *argv[])
 			aswitch.broadcastDummyUserMessage();
 		}*/
 #ifdef ZEROCONF_SUPPORT
-		while(aswitch.zeroconf.dashelStep(-1));
+		while(aswitch.zeroconf.dashelStep(1000) || watchTargets)
 #else // ZEROCONF_SUPPORT
-		while(aswitch.step(-1));
+		while(aswitch.step(1000) || watchTargets)
 #endif // ZEROCONF_SUPPORT
+			aswitch.checkWatchedTargets();
 	}
 	catch(Dashel::DashelException e)
 	{

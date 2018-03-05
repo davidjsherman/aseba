@@ -46,7 +46,7 @@ namespace Aseba
 				@param dump should we dump content of each message
 				@param forward should we only forward messages instead of transmit them back to the sender
 			*/
-			Switch(unsigned port, std::string name, bool verbose, bool dump, bool forward, bool rawTime);
+			Switch(unsigned port, std::string name, bool verbose, bool dump, bool forward, bool rawTime, bool watchTargets);
 
 			/*! Forwards the data received for a connections to the other ones.
 				If forward is false, transmit it back to the sender too.
@@ -63,7 +63,11 @@ namespace Aseba
 				@param targetId the target node id to remap
 			*/
 			void remapId(Dashel::Stream* stream, const uint16_t localId, const uint16_t targetId);
-			
+
+			/*! Targets that should be watched for reconnection */
+			void watchTarget(std::string target);
+			void checkWatchedTargets();
+
 #ifdef ZEROCONF_SUPPORT
 			/*! The switch provides a Zeroconf service, used to advertise the switch
 			    and potentially the nodes it provides.
@@ -84,12 +88,15 @@ namespace Aseba
 			bool dump; //!< should we dump content of CAN messages
 			bool forward; //!< should we only forward messages instead of transmit them back to the sender
 			bool rawTime; //!< should displayed timestamps be of the form sec:usec since 1970
+			bool watchTargets; //!< should disconnected targets be polled for reconnection
 			
 			//! A pair of id: local, target
 			typedef std::pair<uint16_t, uint16_t> IdPair;
 			//! A table allowing to remap the aseba node id of streams
 			typedef std::map<Dashel::Stream*, IdPair> IdRemapTable;
 			IdRemapTable idRemapTable; //!< table for remapping id
+			//! A collection of targets to be polled for reconnection
+			std::map<std::string,bool> targetsNeedingReconnect;
 	};
 	
 	/*@}*/
